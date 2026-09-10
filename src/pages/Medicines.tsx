@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent, KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import QRCode from 'qrcode'
@@ -11,6 +11,7 @@ import { medicineCategoryLabels, medicineText, medicineUnitLabels } from '../i18
 import { barcodeDataUri, generateBarcodeValue } from '../utils/barcode'
 import { calculateWeightedAverageCost } from '../utils/inventoryCosting'
 import { moveRecordToRecycleBin } from '../utils/recycleBin'
+import { toast } from '../utils/toast'
 
 function BarcodeIcon({ size = 18, className = '' }: { size?: number; className?: string }) {
   return (
@@ -270,7 +271,7 @@ function inTimeRange(product: Product, filter: string, from: string, to: string)
   return true
 }
 
-export default function Medicines({ language }: { language: Language }) {
+export default function Medicines({ language, globalSearch = '' }: { language: Language; globalSearch?: string }) {
   const t = medicineText[language] ?? medicineText.English
   const [products, setProducts] = useState<Product[]>(() => {
     const raw = load<unknown>('products', [])
@@ -306,6 +307,10 @@ export default function Medicines({ language }: { language: Language }) {
   const [customHeight, setCustomHeight] = useState(25)
   const [menu, setMenu] = useState<{ id: string; top: number; left: number } | null>(null)
   const [formError, setFormError] = useState('')
+
+  useEffect(() => {
+    setSearch(globalSearch)
+  }, [globalSearch])
 
   const filtered = useMemo(() => products.filter((product) => {
     const q = search.trim().toLowerCase()
@@ -373,7 +378,7 @@ export default function Medicines({ language }: { language: Language }) {
       const weighted = calculateWeightedAverageCost(product.id, entries, product.purchase)
       nextProducts = nextProducts.map((p) => p.id === product.id ? { ...p, purchase: weighted } : p)
     }
-    setProducts(nextProducts); save('products', nextProducts); notifyDataChanged(); setFormOpen(false)
+    setProducts(nextProducts); save('products', nextProducts); notifyDataChanged(); setFormOpen(false); toast.success(editingId ? t.edit : t.add, product.name)
   }
 
   const saveProductLinkedRecords = (product: Product, _previous?: Product) => {
@@ -416,6 +421,7 @@ export default function Medicines({ language }: { language: Language }) {
     save('godownEntries', godownEntries.filter((e) => e.referenceId !== ref))
     save('supplierPurchases', supplierPurchases.filter((p) => p.id !== ref))
     notifyDataChanged()
+    toast.warning(t.delete, product.name)
   }
 
   const createSupplier = (event: FormEvent) => {
@@ -524,7 +530,19 @@ function ActionMenu({ product, t, top, left, onClose, onView, onEdit, onBarcode,
     </div>
   </>, document.body)
 }
-function MenuButton({ icon: Icon, label, onClick, danger=false }: any) { return <button onClick={onClick} className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-start text-xs hover:bg-slate-50 dark:hover:bg-white/5 ${danger?'text-red-500':''}`}><Icon size={15}/>{label}</button> }
+function MenuButton({ icon: Icon, label, onClick, danger=false }: any) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-start text-xs font-semibold transition-colors hover:bg-slate-50 dark:hover:bg-white/10 ${
+        danger ? 'text-red-500 dark:text-red-300' : 'text-slate-700 dark:text-slate-100'
+      }`}
+    >
+      <Icon size={15}/>
+      {label}
+    </button>
+  )
+}
 
 function Field({ label, children, full=false }: { label: string; children: React.ReactNode; full?: boolean }) { return <label className={full?'md:col-span-2':''}><span className="mb-1.5 block text-xs font-semibold">{label}</span>{children}</label> }
 

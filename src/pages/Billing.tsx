@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
 import { CalendarDays, Camera, Minus, Plus, Printer, Search, Trash2, User } from 'lucide-react'
 import type { Language } from '../i18n'
+import { toast } from '../utils/toast'
 
 const currencies = [
   ['AFN', '؋', 'Afghan Afghani'], ['USD', '$', 'US Dollar'], ['EUR', '€', 'Euro'],
@@ -45,7 +46,7 @@ const copy = {
   پښتو:{title:'بل جوړول',sub:'فاکتور جوړول او پلور ترسره کول',scanner:'فعال سکینر',customer:'پېرودونکی',selectCustomer:'پېرودونکی وټاکئ',or:'یا',customerName:'د پېرودونکي نوم ولیکئ',currency:'اسعار',discount:'تخفیف',date:'نېټه',gregorian:'میلادي',shamsi:'هجري شمسي',payment:'د تادیې طریقه',paymentStatus:'د تادیې حالت',cash:'نغد',card:'کارت',bank:'بانکي لېږد',online:'آنلاین تادیه',paid:'ورکړل شوی',partial:'جزوي',unpaid:'نه دی ورکړل شوی',search:'محصول د نوم، کوډ یا بارکوډ له مخې ولټوئ...',items:'د فاکتور توکي',empty:'تر اوسه توکی نه دی اضافه شوی',emptyHint:'بارکوډ سکین یا لټون وکړئ',sale:'پلور',itemDiscount:'تخفیف',subtotal:'فرعي مجموعه',total:'ټول',savePrint:'خوندي او چاپ',saveInvoice:'فاکتور خوندي کړئ',stock:'موجود',qty:'شمېر',insufficient:'د دې توکي موجودي کافي نه ده.',saved:'فاکتور خوندي شو.'}
 } as const
 
-export default function Billing({language,editInvoiceId,onEditDone}:{language:Language;editInvoiceId?:string|null;onEditDone?:()=>void}){
+export default function Billing({language,globalSearch='',editInvoiceId,onEditDone}:{language:Language;globalSearch?:string;editInvoiceId?:string|null;onEditDone?:()=>void}){
   const t=copy[language]
   const isRtl = language === 'دری' || language === 'پښتو'
   const [products,setProducts]=useState<Product[]>(()=>load('products',[]))
@@ -67,11 +68,12 @@ export default function Billing({language,editInvoiceId,onEditDone}:{language:La
   const inputLastScanAt=useRef(0)
 
   useEffect(()=>{ const f=()=>{setProducts(load('products',[]));setCustomers(load('customers',[]))}; window.addEventListener('pharma:data-changed',f); return()=>window.removeEventListener('pharma:data-changed',f)},[])
+  useEffect(()=>setSearch(globalSearch),[globalSearch])
 
   useEffect(()=>{ if(!editInvoiceId)return; const inv=load<any[]>('billingInvoices',[]).find(x=>String(x.id)===String(editInvoiceId)); if(!inv)return; setCustomerId(String(inv.customerId||'')); setWalkIn(inv.customerId?'':String(inv.customerName||'')); setCurrency(inv.currency||'AFN'); setDiscount(n(inv.discount)); setPaymentMethod(inv.paymentMethod||'cash'); setPaymentStatus((inv.balance??inv.remaining??0)>0?((inv.paidAmount??inv.paid??0)>0?'partial':'unpaid'):'paid'); setDate(inv.date||today()); setCart((inv.items||[]).map((i:any)=>{const p=products.find(x=>String(x.id)===String(i.productId));return {...(p||{}),id:i.productId||p?.id,name:i.name||p?.name,code:i.code||p?.code,barcode:i.barcode||p?.barcode,quantity:n(p?.quantity)+n(i.quantity??i.qty),unit:i.unit||p?.unit||'Piece',selling:n(i.price??i.selling),purchase:n(i.purchase??i.purchasePrice??p?.purchase),currency:inv.currency||p?.currency||'AFN',qty:n(i.quantity??i.qty),discount:n(i.discount)}})); },[editInvoiceId])
 
   const results=useMemo(()=>{const q=search.trim().toLowerCase(); if(!q)return[]; return products.filter(p=>[p.name,p.code,p.barcode].some(v=>String(v||'').toLowerCase().includes(q))).slice(0,8)},[products,search])
-  const addProduct=(p:Product)=>{ if(n(p.quantity)<=0){setMessage(t.insufficient);return}; setMessage(''); setCart(c=>{const exists=c.find(x=>x.id===p.id); return exists?c.map(x=>x.id===p.id?{...x,qty:Math.min(x.qty+1,n(p.quantity))}:x):[...c,{...p,qty:1,discount:0}]}); setSearch('') }
+  const addProduct=(p:Product)=>{ if(n(p.quantity)<=0){setMessage(t.insufficient);toast.error(t.insufficient,p.name);return}; setMessage(''); setCart(c=>{const exists=c.find(x=>x.id===p.id); return exists?c.map(x=>x.id===p.id?{...x,qty:Math.min(x.qty+1,n(p.quantity))}:x):[...c,{...p,qty:1,discount:0}]}); setSearch('') }
   const addScannedProduct=(raw:string)=>{
     const code=cleanCode(raw)
     if(!code)return false
@@ -142,7 +144,7 @@ export default function Billing({language,editInvoiceId,onEditDone}:{language:La
     const id=existing?.id||`invoice-${Date.now()}`; const no=existing?.invoiceNo||existing?.invoiceNumber||`INV-${String(seq).padStart(5,'0')}`
     const invoice:any={...(existing||{}),id,invoiceNo:no,invoiceNumber:no,createdAt:existing?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString(),date,customerId:resolvedCustomerId,customerName:customer,currency,discount:n(discount),paymentMethod,paymentStatus,subtotal,total,paid,paidAmount:paid,remaining:round(total-paid),balance:round(total-paid),profit,items:cart.map(x=>({productId:x.id,name:x.name,code:x.code||'',qty:x.qty,quantity:x.qty,unit:x.unit,price:n(x.selling),purchase:n(x.purchase),purchasePrice:n(x.purchase),discount:n(x.discount),total:round(n(x.selling)*x.qty-n(x.discount)),lineTotal:round(n(x.selling)*x.qty-n(x.discount))}))}
     if(existing){ const restored=products.map(p=>{const old=(existing.items||[]).filter((i:any)=>String(i.productId)===String(p.id)).reduce((a:number,i:any)=>a+n(i.quantity??i.qty),0);return old?{...p,quantity:n(p.quantity)+old}:p}); const nextProducts=restored.map(p=>{const row=cart.find(x=>x.id===p.id);return row?{...p,quantity:Math.max(0,n(p.quantity)-row.qty)}:p});setProducts(nextProducts);save('products',nextProducts);save('billingInvoices',invoices.map(i=>String(i.id)===String(id)?invoice:i));const tx=load<any[]>('transactions',[]);save('transactions',tx.map(x=>String(x.referenceId)===String(id)&&String(x.referenceSource||'billing')==='billing'?{...x,amount:total,currency,profit,description:`Sale ${no} - ${customer}`} : x));onEditDone?.()}else{save('billingInvoices',[invoice,...invoices]);const nextProducts=products.map(p=>{const row=cart.find(x=>x.id===p.id); return row?{...p,quantity:Math.max(0,n(p.quantity)-row.qty)}:p});setProducts(nextProducts);save('products',nextProducts);const tx=load<any[]>('transactions',[]);save('transactions',[{id:`tx-${Date.now()}`,type:'income',transactionType:'sale',date:new Date().toISOString(),referenceId:invoice.id,referenceSource:'billing',source:'billing',description:`Sale ${invoice.invoiceNo} - ${customer}`,amount:total,currency,profit},...tx])}
-    setMessage(t.saved); setCart([]); setDiscount(0)
+    setMessage(t.saved); toast.success(t.saved, invoice.invoiceNo); setCart([]); setDiscount(0)
     if(shouldPrint) printInvoice(invoice)
   }
 

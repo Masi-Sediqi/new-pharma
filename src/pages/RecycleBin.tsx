@@ -26,7 +26,7 @@ const dateOf = (value: unknown) => {
   return date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString() : '-'
 }
 
-export default function RecycleBin({ language }: { language: Language }) {
+export default function RecycleBin({ language, globalSearch = '' }: { language: Language; globalSearch?: string }) {
   const t = copy[language] ?? copy.English
   const [version, setVersion] = useState(0)
   const [query, setQuery] = useState('')
@@ -41,6 +41,9 @@ export default function RecycleBin({ language }: { language: Language }) {
       window.removeEventListener('storage', refresh)
     }
   }, [])
+  useEffect(() => {
+    setQuery(globalSearch)
+  }, [globalSearch])
 
   const deletedItems = useMemo(() => readCollection<any>('deletedItems'), [version])
   const modules = useMemo(() => ['all', ...Array.from(new Set(deletedItems.map((item) => item.collection || item.module || item.type).filter(Boolean)))], [deletedItems])

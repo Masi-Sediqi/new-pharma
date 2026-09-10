@@ -201,7 +201,7 @@ function ActionMenu({ t, onEdit, onDelete }: { t: any; onEdit: () => void; onDel
   </div>
 }
 
-export default function Expenses({ language }: { language: Language }) {
+export default function Expenses({ language, globalSearch = '' }: { language: Language; globalSearch?: string }) {
   const t = text[language]
   const rtl = language !== 'English'
   const [version, setVersion] = useState(0)
@@ -227,6 +227,9 @@ export default function Expenses({ language }: { language: Language }) {
     window.addEventListener('storage', sync)
     return () => { window.removeEventListener('pharma:data-changed', sync); window.removeEventListener('storage', sync) }
   }, [])
+  useEffect(() => {
+    setSearch(globalSearch)
+  }, [globalSearch])
 
   const normalized = useMemo(() => rows.map((row: any) => ({
     id: String(row.id || `expense-${row.description || row.date || Math.random()}`),

@@ -28,6 +28,7 @@ export type Page = (typeof items)[number][2]
 
 type Props = {
   activePage: Page
+  allowedPages?: Page[]
   collapsed: boolean
   isOpen: boolean
   isRtl: boolean
@@ -63,9 +64,10 @@ function readBrand(language: Language): SidebarBrand {
   }
 }
 
-export default function Sidebar({ activePage, collapsed, isOpen, isRtl, language, onClose, onToggleCollapse, onNavigate }: Props) {
+export default function Sidebar({ activePage, allowedPages, collapsed, isOpen, isRtl, language, onClose, onToggleCollapse, onNavigate }: Props) {
   const hiddenTransform = isRtl ? 'translate-x-full' : '-translate-x-full'
   const [brand, setBrand] = useState<SidebarBrand>(() => readBrand(language))
+  const visibleItems = allowedPages ? items.filter(([, , page]) => allowedPages.includes(page)) : items
 
   useEffect(() => {
     const refresh = () => setBrand(readBrand(language))
@@ -104,7 +106,7 @@ export default function Sidebar({ activePage, collapsed, isOpen, isRtl, language
       </div>
 
       <nav className={`scrollbar-none flex-1 overflow-y-auto px-3 py-2 ${collapsed ? 'lg:px-2' : ''}`}>
-        {items.map(([Icon, label, page]) => (
+        {visibleItems.map(([Icon, label, page]) => (
           <button
             key={label}
             onClick={() => {

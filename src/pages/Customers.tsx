@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Language } from '../i18n'
 import { moveRecordToRecycleBin } from '../utils/recycleBin'
+import { toast } from '../utils/toast'
 
 type Customer={id:string;name:string;phone?:string;email?:string;address?:string;notes?:string;vip?:boolean;status?:'Active'|'Inactive';createdAt?:string}
 type Invoice={id:string;invoiceNo:string;date:string;createdAt?:string;customerId?:string;customerName:string;currency?:string;total:number;paid:number;remaining:number;discount?:number;profit?:number;items?:any[]}
@@ -18,18 +19,19 @@ English:{title:'Customer Management',sub:'Manage customer relationships',add:'Ad
 
 function I({name,className=''}:{name:string;className?:string}){return <span className={`inline-grid h-5 w-5 place-items-center text-[15px] leading-none ${className}`} aria-hidden="true">{name}</span>}
 
-export default function Customers({language,onOpenCustomer}:{language:Language;onOpenCustomer:(id:string)=>void}){
+export default function Customers({language,onOpenCustomer,globalSearch=''}:{language:Language;onOpenCustomer:(id:string)=>void;globalSearch?:string}){
  const t=copy[language]??copy.English; const [customers,setCustomers]=useState<Customer[]>(()=>load('customers',[])); const [invoices,setInvoices]=useState<Invoice[]>(()=>load('billingInvoices',[]));
  const [search,setSearch]=useState(''); const [status,setStatus]=useState('all'); const [pay,setPay]=useState('all'); const [dateFilter,setDateFilter]=useState('all'); const [modal,setModal]=useState(false); const [editing,setEditing]=useState<Customer|null>(null); const [menu,setMenu]=useState<string|null>(null)
  const empty={id:'',name:'',phone:'',email:'',address:'',notes:'',vip:false,status:'Active' as const}; const [form,setForm]=useState<Customer>(empty)
  useEffect(()=>{const f=()=>{setCustomers(load('customers',[]));setInvoices(load('billingInvoices',[]))};window.addEventListener('pharma:data-changed',f);window.addEventListener('storage',f);return()=>{window.removeEventListener('pharma:data-changed',f);window.removeEventListener('storage',f)}},[])
+ useEffect(()=>setSearch(globalSearch),[globalSearch])
  useEffect(()=>{if(!modal)return;const old=document.body.style.overflow;document.body.style.overflow='hidden';return()=>{document.body.style.overflow=old}},[modal])
  const salesFor=(c:Customer)=>invoices.filter(i=>String(i.customerId||'')===String(c.id)||(!i.customerId&&i.customerName===c.name))
  const rows=useMemo(()=>customers.map(c=>{const sales=salesFor(c);return{...c,total:sales.reduce((s,i)=>s+n(i.total),0),pending:sales.reduce((s,i)=>s+n(i.remaining),0),orders:sales.length,last:sales[0]?.date||c.createdAt?.slice(0,10)||''}}).filter(c=>{const q=search.toLowerCase();if(q&&!`${c.name} ${c.phone||''} ${c.email||''}`.toLowerCase().includes(q))return false;if(status!=='all'&&(c.status||'Active').toLowerCase()!==status)return false;if(pay==='paid'&&c.pending>0)return false;if(pay==='pending'&&c.pending<=0)return false;if(dateFilter!=='all'&&c.last){const d=new Date(c.last),now=new Date();const days=(+now-+d)/86400000;if(dateFilter==='today'&&days>1)return false;if(dateFilter==='week'&&days>7)return false;if(dateFilter==='month'&&days>31)return false;if(dateFilter==='year'&&days>366)return false}return true}),[customers,invoices,search,status,pay,dateFilter])
  const totals=customers.reduce((a,c)=>{const s=salesFor(c);a.p+=s.reduce((x,i)=>x+n(i.total),0);a.r+=s.reduce((x,i)=>x+n(i.remaining),0);return a},{p:0,r:0})
  const openAdd=()=>{setEditing(null);setForm({...empty,id:`customer-${Date.now()}`});setModal(true)}; const openEdit=(c:Customer)=>{setEditing(c);setForm({...empty,...c});setModal(true);setMenu(null)}
- const persist=()=>{if(!form.name.trim())return;const next=editing?customers.map(c=>c.id===editing.id?{...form,id:editing.id}:c):[{...form,createdAt:new Date().toISOString()},...customers];setCustomers(next);save('customers',next);setModal(false)}
- const remove=(c:Customer)=>{setMenu(null);if(!confirm(t.confirm))return;moveRecordToRecycleBin('customers',c,c.name);const next=customers.filter(x=>x.id!==c.id);setCustomers(next);save('customers',next)}
+ const persist=()=>{if(!form.name.trim())return;const wasEditing=!!editing;const next=editing?customers.map(c=>c.id===editing.id?{...form,id:editing.id}:c):[{...form,createdAt:new Date().toISOString()},...customers];setCustomers(next);save('customers',next);setModal(false);toast.success(wasEditing?t.edit:t.add, form.name)}
+ const remove=(c:Customer)=>{setMenu(null);if(!confirm(t.confirm))return;moveRecordToRecycleBin('customers',c,c.name);const next=customers.filter(x=>x.id!==c.id);setCustomers(next);save('customers',next);toast.warning(t.del, c.name)}
  return <div className="w-full pb-8">
   <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between"><div><h1 className="text-2xl font-extrabold">{t.title}</h1><p className="mt-1 text-sm text-slate-500">{t.sub}</p></div><div className="flex gap-2"><button onClick={openAdd} className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#172a57] px-4 text-sm font-bold text-white"><I name="＋"/>{t.add}</button><button onClick={()=>window.print()} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold dark:border-[#24365f] dark:bg-[#111a2c] dark:text-white"><I name="🖨"/>{t.print}</button></div></div>
   <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Card title={t.total} value={String(customers.length)} icon="👥" accent="border-sky-400 bg-sky-50"/><Card title={t.vip} value={String(customers.filter(c=>c.vip).length)} icon="☆" accent="border-emerald-400 bg-emerald-50"/><Card title={t.purchases} value={money(totals.p)} icon="▣" accent="border-[#172a57] bg-slate-100"/><Card title={t.pending} value={money(totals.r)} icon="$" accent="border-amber-400 bg-amber-50"/></div>

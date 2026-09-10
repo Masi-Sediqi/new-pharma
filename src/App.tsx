@@ -1,12 +1,13 @@
-import { Component, lazy, Suspense, useEffect, useState } from 'react'
+import { Component, lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import {
   Archive, Banknote, Box, CalendarDays, Check, CircleDollarSign, Clock3, Package, RefreshCcw,
-  ShoppingCart, TrendingUp, User, Users, WalletCards
+  Crown, ShieldCheck, ShoppingCart, TrendingUp, User, Users, WalletCards
 } from 'lucide-react'
 import Header from './components/Header'
 import QuickActions from './components/QuickActions'
 import Sidebar from './components/Sidebar'
+import ToastHost from './components/ToastHost'
 import type { Page } from './components/Sidebar'
 import StatCard from './components/StatCard'
 import TrendChart from './components/TrendChart'
@@ -80,6 +81,135 @@ class PageErrorBoundary extends Component<PageErrorBoundaryProps, PageErrorBound
 
 const money = '0.00 ؋'
 type DashboardFilter = 'all' | 'today' | 'week' | 'month' | 'year' | 'custom'
+type AccountUser = { id: string; username: string; displayName: string; password?: string; role?: string; active?: boolean; permissions?: Record<string, Record<string, boolean>> }
+type CurrentAccount = { id: string; username: string; displayName: string; admin?: boolean; permissions?: AccountUser['permissions'] }
+
+const ACCOUNT_KEY = 'pharma-current-account'
+const LOGGED_OUT_KEY = 'pharma-logged-out'
+const PAGE_MODULE: Record<Page, string> = {
+  dashboard: 'dashboard',
+  medicines: 'products',
+  billing: 'billing',
+  sales: 'sales',
+  staff: 'staff',
+  customers: 'customers',
+  godown: 'godown',
+  suppliers: 'suppliers',
+  expenses: 'expenses',
+  loans: 'loans',
+  financials: 'financials',
+  reports: 'reports',
+  recycle: 'recycle',
+  settings: 'settings',
+}
+
+function readAccounts(): AccountUser[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('accounts') || '[]')
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function canReadPage(account: CurrentAccount | null, page: Page) {
+  if (!account) return false
+  if (account.admin) return true
+  const module = PAGE_MODULE[page]
+  const permissions = account.permissions?.[module]
+  return !!(permissions?.all || permissions?.read)
+}
+
+function AccountSelector({ isRtl, language, onSelect }: { isRtl: boolean; language: Language; onSelect: (account: CurrentAccount) => void }) {
+  const [accounts, setAccounts] = useState<AccountUser[]>(readAccounts)
+  const [selected, setSelected] = useState<AccountUser | 'admin' | null>(null)
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const title = language === 'English' ? 'Select your account to continue' : language === 'پښتو' ? 'د دوام لپاره خپل حساب وټاکئ' : 'برای ادامه حساب خود را انتخاب کنید'
+  const adminTitle = language === 'English' ? 'Administrator' : language === 'پښتو' ? 'مدیر سیستم' : 'مدیر سیستم'
+  const adminSub = language === 'English' ? 'Full system access' : language === 'پښتو' ? 'د ټول سیستم لاسرسی' : 'دسترسی کامل سیستم'
+  const vip = language === 'English' ? 'Use emergency VIP key' : language === 'پښتو' ? 'بیړنی VIP کیلي وکاروئ' : 'استفاده از کلید اضطراری VIP'
+  const passwordLabel = language === 'English' ? 'Password' : language === 'پښتو' ? 'پټ نوم' : 'رمز عبور'
+  const loginLabel = language === 'English' ? 'Login' : language === 'پښتو' ? 'ننوتل' : 'ورود'
+  const wrongPassword = language === 'English' ? 'Incorrect password.' : language === 'پښتو' ? 'پټ نوم سم نه دی.' : 'رمز عبور درست نیست.'
+
+  useEffect(() => {
+    const refresh = () => setAccounts(readAccounts())
+    window.addEventListener('pharma:data-changed', refresh)
+    window.addEventListener('storage', refresh)
+    return () => {
+      window.removeEventListener('pharma:data-changed', refresh)
+      window.removeEventListener('storage', refresh)
+    }
+  }, [])
+
+  const activeAccounts = accounts.filter((account) => account.active !== false)
+  const login = () => {
+    if (!selected) return
+    if (selected === 'admin') {
+      onSelect({ id: 'admin', username: 'admin', displayName: adminTitle, admin: true })
+      return
+    }
+    if (selected.password && selected.password !== password) {
+      setError(wrongPassword)
+      return
+    }
+    onSelect({ id: selected.id, username: selected.username, displayName: selected.displayName || selected.username, permissions: selected.permissions })
+  }
+
+  return (
+    <div className="fixed inset-0 z-[250] grid place-items-center bg-slate-950/55 p-4 backdrop-blur-md" dir={isRtl ? 'rtl' : 'ltr'}>
+      <div className="w-full max-w-[450px] rounded-xl border border-white/70 bg-white/95 p-6 text-slate-950 shadow-2xl dark:border-[#314260] dark:bg-[#101827]/95 dark:text-white">
+        <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-slate-100 text-[#172a57] dark:bg-white/10 dark:text-amber-400">
+          <ShieldCheck size={32} />
+        </div>
+        <h2 className="mt-5 text-center text-2xl font-extrabold">Smart Pharma</h2>
+        <p className="mt-2 text-center text-sm text-slate-500 dark:text-slate-300">{title}</p>
+        <div className="mt-6 space-y-2">
+          <button
+            type="button"
+            onClick={() => { setSelected('admin'); setPassword(''); setError('') }}
+            className={`flex w-full items-center gap-4 rounded-xl border border-dashed bg-white px-4 py-3 text-start transition hover:border-amber-400 hover:bg-amber-50 dark:bg-white/5 dark:hover:bg-amber-500/10 ${selected === 'admin' ? 'border-amber-400 ring-2 ring-amber-400/25 dark:border-amber-400' : 'border-slate-300 dark:border-[#314260]'}`}
+          >
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300"><Crown size={20}/></span>
+            <span className="min-w-0"><b className="block">{adminTitle}</b><small className="text-slate-500 dark:text-slate-300">{adminSub}</small></span>
+          </button>
+          {activeAccounts.map((account) => (
+            <button
+              key={account.id}
+              type="button"
+              onClick={() => { setSelected(account); setPassword(''); setError('') }}
+              className={`flex w-full items-center gap-4 rounded-xl border bg-white px-4 py-3 text-start transition hover:border-[#172a57] hover:bg-slate-50 dark:bg-white/5 dark:hover:bg-white/10 ${selected !== 'admin' && selected?.id === account.id ? 'border-[#172a57] ring-2 ring-[#172a57]/15 dark:border-amber-400 dark:ring-amber-400/20' : 'border-slate-200 dark:border-[#314260]'}`}
+            >
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-slate-100 text-sm font-extrabold text-[#172a57] dark:bg-white/10 dark:text-white">{(account.displayName || account.username || 'U').slice(0, 1).toUpperCase()}</span>
+              <span className="min-w-0"><b className="block truncate">{account.displayName || account.username}</b><small className="text-slate-500 dark:text-slate-300">@{account.username}</small></span>
+            </button>
+          ))}
+        </div>
+        {selected && (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-[#314260] dark:bg-white/5">
+            <label className="block text-xs font-bold text-slate-600 dark:text-slate-300">{passwordLabel}</label>
+            <input
+              autoFocus
+              type="password"
+              value={password}
+              onChange={(event) => { setPassword(event.target.value); setError('') }}
+              onKeyDown={(event) => { if (event.key === 'Enter') login() }}
+              className="mt-2 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-[#172a57] focus:ring-2 focus:ring-[#172a57]/20 dark:border-[#314260] dark:bg-[#0c1424] dark:text-white dark:focus:border-amber-400 dark:focus:ring-amber-400/20"
+            />
+            {error && <div className="mt-2 text-xs font-semibold text-red-500 dark:text-red-300">{error}</div>}
+            <button type="button" onClick={login} className="mt-3 h-10 w-full rounded-lg bg-[#172a57] text-sm font-extrabold text-white transition hover:bg-[#22376b] dark:bg-amber-500 dark:text-slate-950">
+              {loginLabel}
+            </button>
+          </div>
+        )}
+        <button type="button" className="mx-auto mt-6 flex items-center gap-2 text-sm font-semibold text-slate-500 dark:text-slate-300">
+          <Crown size={15}/>{vip}
+        </button>
+      </div>
+    </div>
+  )
+}
 
 const dashboardFilterLabels: Record<Language, Record<DashboardFilter, string>> = {
   English: { all: 'All time', today: 'Today', week: 'Weekly', month: 'Monthly', year: 'Yearly', custom: 'Custom' },
@@ -275,14 +405,28 @@ export default function App() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('pharma-sidebar-collapsed') === '1')
   const [dashboardFilter, setDashboardFilter] = useState<DashboardFilter>('month')
+  const [globalSearch, setGlobalSearch] = useState('')
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null)
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null)
   const [billingEditId, setBillingEditId] = useState<string | null>(null)
   const [theme, setTheme] = useState<ThemeName>(() => (localStorage.getItem('pharma-theme') as ThemeName) || 'minimalism')
   const [language, setLanguage] = useState<Language>(() => (localStorage.getItem('pharma-language') as Language) || 'دری')
+  const [currentAccount, setCurrentAccount] = useState<CurrentAccount | null>(() => {
+    if (localStorage.getItem(LOGGED_OUT_KEY) === '1') return null
+    try {
+      const parsed = JSON.parse(localStorage.getItem(ACCOUNT_KEY) || 'null')
+      return parsed && typeof parsed === 'object' ? parsed : { id: 'admin', username: 'admin', displayName: 'Administrator', admin: true }
+    } catch {
+      return { id: 'admin', username: 'admin', displayName: 'Administrator', admin: true }
+    }
+  })
+  const [accountPickerOpen, setAccountPickerOpen] = useState(() => localStorage.getItem(LOGGED_OUT_KEY) === '1')
   const isDarkTheme = theme === 'glassmorphism' || theme === 'liquidGlass' || theme === 'neonGlass'
   const isRtl = rtlLanguages.includes(language)
+  const allowedPages = useMemo(() => ([
+    'dashboard','medicines','billing','sales','staff','customers','godown','suppliers','expenses','loans','financials','reports','recycle','settings',
+  ] as Page[]).filter((page) => canReadPage(currentAccount, page)), [currentAccount])
   const sidebarOffsetClass = sidebarCollapsed
     ? isRtl ? 'lg:mr-[72px]' : 'lg:ml-[72px]'
     : isRtl ? 'lg:mr-[260px]' : 'lg:ml-[260px]'
@@ -302,36 +446,76 @@ export default function App() {
     localStorage.setItem('pharma-sidebar-collapsed', sidebarCollapsed ? '1' : '0')
   }, [sidebarCollapsed])
 
+  useEffect(() => {
+    if (!currentAccount) return
+    localStorage.setItem(ACCOUNT_KEY, JSON.stringify(currentAccount))
+  }, [currentAccount])
+
+  useEffect(() => {
+    if (!allowedPages.length || allowedPages.includes(activePage)) return
+    setActivePage(allowedPages[0])
+    setSelectedSupplierId(null)
+    setSelectedCustomerId(null)
+    setSelectedStaffId(null)
+    setBillingEditId(null)
+  }, [activePage, allowedPages])
+
+  const selectAccount = (account: CurrentAccount) => {
+    setCurrentAccount(account)
+    localStorage.removeItem(LOGGED_OUT_KEY)
+    localStorage.setItem(ACCOUNT_KEY, JSON.stringify(account))
+    setAccountPickerOpen(false)
+  }
+
+  const logout = () => {
+    localStorage.removeItem(ACCOUNT_KEY)
+    localStorage.setItem(LOGGED_OUT_KEY, '1')
+    setCurrentAccount(null)
+    setAccountPickerOpen(true)
+  }
+
   const pageAnimationKey = `${activePage}-${selectedSupplierId || selectedCustomerId || selectedStaffId || billingEditId || 'list'}`
+  const navigate = (page: Page) => {
+    if (!canReadPage(currentAccount, page)) return
+    setActivePage(page)
+    setGlobalSearch('')
+    if (page !== 'suppliers') setSelectedSupplierId(null)
+    if (page !== 'customers') setSelectedCustomerId(null)
+    if (page !== 'staff') setSelectedStaffId(null)
+    if (page !== 'billing') setBillingEditId(null)
+  }
 
   return (
     <div className="app-root min-h-screen bg-page text-slate-950 dark:bg-[#090f1d] dark:text-white" dir={isRtl ? 'rtl' : 'ltr'}>
       <Sidebar
         activePage={activePage}
+        allowedPages={allowedPages}
         collapsed={sidebarCollapsed}
         isOpen={mobileSidebarOpen}
         isRtl={isRtl}
         language={language}
         onClose={() => setMobileSidebarOpen(false)}
         onToggleCollapse={() => setSidebarCollapsed((value) => !value)}
-        onNavigate={(page) => { setActivePage(page); if (page !== 'suppliers') setSelectedSupplierId(null); if (page !== 'customers') setSelectedCustomerId(null); if (page !== 'staff') setSelectedStaffId(null); if (page !== 'billing') setBillingEditId(null) }}
+        onNavigate={navigate}
       />
-      <Header isRtl={isRtl} language={language} onMenuClick={() => setMobileSidebarOpen(true)} onLanguageChange={setLanguage} theme={theme} onThemeChange={setTheme} sidebarCollapsed={sidebarCollapsed} />
+      <Header isRtl={isRtl} language={language} onMenuClick={() => setMobileSidebarOpen(true)} onLanguageChange={setLanguage} theme={theme} onThemeChange={setTheme} sidebarCollapsed={sidebarCollapsed} onLogout={logout} searchValue={globalSearch} onSearchChange={setGlobalSearch} />
+      <ToastHost isRtl={isRtl} />
+      {accountPickerOpen && <AccountSelector isRtl={isRtl} language={language} onSelect={selectAccount} />}
       <main className={`px-3 pb-8 pt-4 transition-[margin] duration-300 lg:px-5 ${sidebarOffsetClass}`}>
         <div key={pageAnimationKey} className="page-fade">
           {activePage === 'settings' ? (
             <Settings theme={theme} onThemeChange={setTheme} language={language} onLanguageChange={setLanguage} />
           ) : activePage === 'suppliers' ? (
-            selectedSupplierId ? <SupplierDetails supplierId={selectedSupplierId} language={language} onBack={() => setSelectedSupplierId(null)} /> : <Suppliers language={language} onOpenSupplier={setSelectedSupplierId} />
+            selectedSupplierId ? <SupplierDetails supplierId={selectedSupplierId} language={language} onBack={() => setSelectedSupplierId(null)} /> : <Suppliers language={language} onOpenSupplier={setSelectedSupplierId} globalSearch={globalSearch} />
           ) : activePage === 'customers' ? (
-            selectedCustomerId ? <CustomerDetails customerId={selectedCustomerId} language={language} onBack={() => setSelectedCustomerId(null)} /> : <Customers language={language} onOpenCustomer={setSelectedCustomerId} />
+            selectedCustomerId ? <CustomerDetails customerId={selectedCustomerId} language={language} onBack={() => setSelectedCustomerId(null)} /> : <Customers language={language} onOpenCustomer={setSelectedCustomerId} globalSearch={globalSearch} />
           ) : activePage === 'staff' ? (
             <Suspense fallback={<div className="grid min-h-[300px] place-items-center text-sm text-slate-500 dark:text-slate-300">Loading staff…</div>}>
-              {selectedStaffId ? <StaffDetails staffId={selectedStaffId} language={language} onBack={() => setSelectedStaffId(null)} /> : <Staff language={language} onOpenStaff={setSelectedStaffId} />}
+              {selectedStaffId ? <StaffDetails staffId={selectedStaffId} language={language} onBack={() => setSelectedStaffId(null)} /> : <Staff language={language} onOpenStaff={setSelectedStaffId} globalSearch={globalSearch} />}
             </Suspense>
           ) : activePage === 'sales' ? (
             <Suspense fallback={<div className="grid min-h-[300px] place-items-center text-sm text-slate-500 dark:text-slate-300">Loading sales…</div>}>
-              <Sales language={language} onEditInvoice={(id) => { setBillingEditId(id); setActivePage('billing') }} />
+              <Sales language={language} globalSearch={globalSearch} onEditInvoice={(id) => { setBillingEditId(id); setActivePage('billing') }} />
             </Suspense>
           ) : activePage === 'godown' ? (
             <PageErrorBoundary key={`godown-${language}`} pageName="Godown" onReset={() => setActivePage('dashboard')}>
@@ -341,7 +525,7 @@ export default function App() {
             </PageErrorBoundary>
           ) : activePage === 'expenses' ? (
             <Suspense fallback={<div className="grid min-h-[300px] place-items-center text-sm text-slate-500 dark:text-slate-300">Loading expenses…</div>}>
-              <Expenses language={language} />
+              <Expenses language={language} globalSearch={globalSearch} />
             </Suspense>
           ) : activePage === 'loans' ? (
             <PageErrorBoundary key={`loans-${language}`} pageName="Loans" onReset={() => setActivePage('dashboard')}>
@@ -357,13 +541,13 @@ export default function App() {
             </PageErrorBoundary>
           ) : activePage === 'recycle' ? (
             <PageErrorBoundary key={`recycle-${language}`} pageName="Recycle Bin" onReset={() => setActivePage('dashboard')}>
-              <Suspense fallback={<div className="grid min-h-[300px] place-items-center text-sm text-slate-500 dark:text-slate-300">Loading recycle bin…</div>}><RecycleBin language={language} /></Suspense>
+            <Suspense fallback={<div className="grid min-h-[300px] place-items-center text-sm text-slate-500 dark:text-slate-300">Loading recycle bin…</div>}><RecycleBin language={language} globalSearch={globalSearch} /></Suspense>
             </PageErrorBoundary>
           ) : activePage === 'billing' ? (
-            <Billing language={language} editInvoiceId={billingEditId} onEditDone={() => setBillingEditId(null)} />
+            <Billing language={language} globalSearch={globalSearch} editInvoiceId={billingEditId} onEditDone={() => setBillingEditId(null)} />
           ) : activePage === 'medicines' ? (
             <Suspense fallback={<div className="grid min-h-[300px] place-items-center text-sm text-slate-500">Loading medicines…</div>}>
-              <Medicines language={language} />
+              <Medicines language={language} globalSearch={globalSearch} />
             </Suspense>
           ) : (
             <Dashboard filter={dashboardFilter} language={language} onFilterChange={setDashboardFilter} />

@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent, useMemo, useState } from 'react'
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from 'react'
 import {
   Check, ChevronDown, DollarSign, Edit3, Plus, Printer, Search,
   Trash2, TrendingDown, TrendingUp, Truck, Users, X,
@@ -6,6 +6,7 @@ import {
 import type { Language } from '../i18n'
 import { supplierText } from '../i18n'
 import { moveRecordToRecycleBin } from '../utils/recycleBin'
+import { toast } from '../utils/toast'
 import {
   calculateSupplierRowPaid,
   calculateSupplierSummaryByCurrency,
@@ -83,7 +84,7 @@ const money = (value: number, currency = 'AFN') => {
   return `${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${found?.[1] ?? currency}`
 }
 
-export default function Suppliers({ language, onOpenSupplier }: { language: Language, onOpenSupplier?: (supplierId: string) => void }) {
+export default function Suppliers({ language, onOpenSupplier, globalSearch = '' }: { language: Language, onOpenSupplier?: (supplierId: string) => void, globalSearch?: string }) {
   const t = supplierText[language]
   const [suppliers, setSuppliers] = useState<Supplier[]>(() => loadCollection<Supplier[]>('suppliers', []))
   const [godownEntries] = useState<GodownEntry[]>(() => loadCollection<GodownEntry[]>('godownEntries', []))
@@ -95,6 +96,10 @@ export default function Suppliers({ language, onOpenSupplier }: { language: Lang
   const [balanceFilter, setBalanceFilter] = useState<'all' | 'payable' | 'receivable' | 'settled'>('all')
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month' | 'year'>('all')
   const [printOpen, setPrintOpen] = useState(false)
+
+  useEffect(() => {
+    setSearch(globalSearch)
+  }, [globalSearch])
 
   const supplierRows = useMemo(() => godownEntries.flatMap((entry) => {
     const rows = Array.isArray(entry.rows) ? entry.rows : []
@@ -192,6 +197,7 @@ export default function Suppliers({ language, onOpenSupplier }: { language: Lang
     setSuppliers(next)
     saveCollection('suppliers', next)
     setModalOpen(false)
+    toast.success(editingId ? t.edit : t.add, record.name)
   }
 
   const removeSupplier = (id: string) => {
@@ -201,6 +207,7 @@ export default function Suppliers({ language, onOpenSupplier }: { language: Lang
     const next = suppliers.filter((item) => item.id !== id)
     setSuppliers(next)
     saveCollection('suppliers', next)
+    toast.warning(t.delete, supplier?.name)
   }
 
   return (

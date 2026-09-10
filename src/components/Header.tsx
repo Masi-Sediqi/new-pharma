@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Bell, Check, Download, Filter, Languages, Menu,
-  Moon, Search, Settings, SlidersHorizontal, Sun, Upload, User, Volume2,
+  LogOut, Moon, Search, Settings, SlidersHorizontal, Sun, Upload, User, Volume2,
   WalletCards, X
 } from 'lucide-react'
 import type { Language } from '../i18n'
@@ -136,10 +136,14 @@ type Props = {
   theme: ThemeName
   onThemeChange: (theme: ThemeName) => void
   sidebarCollapsed: boolean
+  onLogout?: () => void
+  searchValue?: string
+  onSearchChange?: (value: string) => void
 }
 
-export default function Header({ isRtl, language, onMenuClick, onLanguageChange, theme, onThemeChange, sidebarCollapsed }: Props) {
+export default function Header({ isRtl, language, onMenuClick, onLanguageChange, theme, onThemeChange, sidebarCollapsed, onLogout, searchValue = '', onSearchChange }: Props) {
   const wt = walletText[language] ?? walletText.English
+  const headerRef = useRef<HTMLElement | null>(null)
   const [openMenu, setOpenMenu] = useState<MenuName>(null)
   const [cashOpen, setCashOpen] = useState(false)
   const [walletMode, setWalletMode] = useState<'Deposit' | 'Withdraw'>('Deposit')
@@ -158,6 +162,22 @@ export default function Header({ isRtl, language, onMenuClick, onLanguageChange,
     document.documentElement.classList.toggle('dark', isDarkTheme)
     document.documentElement.dataset.theme = theme
   }, [isDarkTheme, theme])
+
+  useEffect(() => {
+    if (!openMenu) return
+    const closeOnOutside = (event: PointerEvent) => {
+      if (!headerRef.current?.contains(event.target as Node)) setOpenMenu(null)
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpenMenu(null)
+    }
+    window.addEventListener('pointerdown', closeOnOutside)
+    window.addEventListener('keydown', closeOnEscape)
+    return () => {
+      window.removeEventListener('pointerdown', closeOnOutside)
+      window.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [openMenu])
 
   const toggleMenu = (menu: Exclude<MenuName, null>) => {
     setOpenMenu((current) => (current === menu ? null : menu))
@@ -238,13 +258,15 @@ export default function Header({ isRtl, language, onMenuClick, onLanguageChange,
 
   return (
     <>
-      <header className={`sticky top-0 z-30 bg-page/95 px-2 pt-2 backdrop-blur transition-[margin] duration-300 dark:bg-[#090f1d]/95 sm:px-3 lg:px-4 ${sidebarOffsetClass}`}>
+      <header ref={headerRef} className={`sticky top-0 z-30 bg-page/95 px-2 pt-2 backdrop-blur transition-[margin] duration-300 dark:bg-[#090f1d]/95 sm:px-3 lg:px-4 ${sidebarOffsetClass}`}>
         <div className="flex h-[54px] items-center gap-1 rounded-2xl border border-slate-200 bg-white px-2 shadow-soft dark:border-[#24365f] dark:bg-[#0c1424] sm:gap-2 sm:px-4">
           <button aria-label="Open sidebar" onClick={onMenuClick} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 lg:hidden"><Menu size={20} /></button>
           <div className="relative min-w-[92px] flex-1 sm:w-[290px] sm:max-w-[38vw] sm:flex-none">
             <Search size={17} className={`pointer-events-none absolute top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-300 ${isRtl ? 'right-2 sm:right-3' : 'left-2 sm:left-3'}`} />
             <input
               aria-label="Search products and customers"
+              value={searchValue}
+              onChange={(event) => onSearchChange?.(event.target.value)}
               placeholder={isRtl ? 'جستجوی داروها، مشتریان...' : 'Search products, customers...'}
               className={`h-10 w-full rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-700 outline-none transition placeholder:text-slate-500 focus:border-[#172a57] focus:bg-white focus:ring-2 focus:ring-[#172a57] dark:border-[#22345d] dark:bg-[#0c1424] dark:text-white dark:placeholder:text-slate-300 dark:focus:border-amber-500 dark:focus:ring-amber-500 sm:text-sm ${isRtl ? 'pl-2 pr-8 text-right sm:pl-3 sm:pr-9' : 'pl-8 pr-2 text-left sm:pl-9 sm:pr-3'}`}
             />
@@ -371,6 +393,9 @@ export default function Header({ isRtl, language, onMenuClick, onLanguageChange,
                   <div className="border-t border-slate-100 py-2 dark:border-[#24365f]">
                     <button className="flex w-full items-center gap-3 px-3 py-2 text-start text-sm hover:bg-slate-50 dark:hover:bg-white/5"><Download size={16} /> Export Backup</button>
                     <button className="flex w-full items-center gap-3 px-3 py-2 text-start text-sm hover:bg-slate-50 dark:hover:bg-white/5"><Upload size={16} /> Import / Restore Backup</button>
+                  </div>
+                  <div className="border-t border-slate-100 py-2 dark:border-[#24365f]">
+                    <button onClick={() => { setOpenMenu(null); onLogout?.() }} className="flex w-full items-center gap-3 px-3 py-2 text-start text-sm font-semibold text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10"><LogOut size={16} /> {isRtl ? 'خروج' : 'Logout'}</button>
                   </div>
                 </MenuPanel>
               )}
