@@ -153,6 +153,8 @@ export default function Header({ isRtl, language, onMenuClick, onLanguageChange,
   const [primaryCurrency, setPrimaryCurrency] = useState(() => localStorage.getItem(PRIMARY_CURRENCY_KEY) || 'all')
   const [exchangeFromCurrency, setExchangeFromCurrency] = useState(() => localStorage.getItem(EXCHANGE_FROM_KEY) || 'original')
   const [exchangeToCurrency, setExchangeToCurrency] = useState(() => localStorage.getItem(EXCHANGE_TO_KEY) || 'AFN')
+  const [installPrompt, setInstallPrompt] = useState<any>(null)
+  const [isStandalone, setIsStandalone] = useState(() => window.matchMedia?.('(display-mode: standalone)').matches || (window.navigator as any).standalone === true)
   const isDarkTheme = theme === 'glassmorphism' || theme === 'liquidGlass' || theme === 'neonGlass'
   const sidebarOffsetClass = sidebarCollapsed
     ? isRtl ? 'lg:mr-[72px]' : 'lg:ml-[72px]'
@@ -162,6 +164,30 @@ export default function Header({ isRtl, language, onMenuClick, onLanguageChange,
     document.documentElement.classList.toggle('dark', isDarkTheme)
     document.documentElement.dataset.theme = theme
   }, [isDarkTheme, theme])
+
+  useEffect(() => {
+    const onBeforeInstall = (event: Event) => {
+      event.preventDefault()
+      setInstallPrompt(event)
+    }
+    const onInstalled = () => {
+      setInstallPrompt(null)
+      setIsStandalone(true)
+    }
+    window.addEventListener('beforeinstallprompt', onBeforeInstall)
+    window.addEventListener('appinstalled', onInstalled)
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBeforeInstall)
+      window.removeEventListener('appinstalled', onInstalled)
+    }
+  }, [])
+
+  const installApp = async () => {
+    if (!installPrompt) return
+    await installPrompt.prompt()
+    try { await installPrompt.userChoice } catch {}
+    setInstallPrompt(null)
+  }
 
   useEffect(() => {
     if (!openMenu) return
@@ -323,6 +349,14 @@ export default function Header({ isRtl, language, onMenuClick, onLanguageChange,
             <IconButton active={cashOpen} label="Cash wallet" onClick={openCashWallet}>
               <WalletCards size={17} />
             </IconButton>
+            {!isStandalone && installPrompt && (
+              <IconButton
+                label={language === 'دری' ? 'نصب اپلیکیشن' : language === 'پښتو' ? 'اپلېکېشن نصب کړئ' : 'Install app'}
+                onClick={installApp}
+              >
+                <Download size={17} />
+              </IconButton>
+            )}
             <IconButton active={isDarkTheme} label="Toggle dark mode" onClick={() => onThemeChange(isDarkTheme ? 'minimalism' : 'neonGlass')}>
               {isDarkTheme ? <Sun size={17} /> : <Moon size={17} />}
             </IconButton>
