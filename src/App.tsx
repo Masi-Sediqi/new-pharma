@@ -382,7 +382,7 @@ function Dashboard({ filter, language, onFilterChange }: { filter: DashboardFilt
         <StatCard title={t.staffPaid} value={formatDashboardMoney(staffPaid)} icon={CircleDollarSign} accent="green" />
       </div>
 
-      <div className="mt-7"><TrendChart /></div>
+      <div className="mt-7"><TrendChart invoices={allInvoices.filter((item) => currencyMatches(item.currency, businessCurrencyFilter))} expenses={allExpenses.filter((item) => currencyMatches(item.currency, businessCurrencyFilter))} filter={filter} language={language} /></div>
 
       <div className="mt-6 grid gap-5 xl:grid-cols-[470px_1fr]">
         <QuickActions />
