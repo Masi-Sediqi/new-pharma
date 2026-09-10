@@ -46,7 +46,7 @@ type Product = {
   manufacturer: string
   prescriptionRequired: boolean
   packHierarchyEnabled: boolean
-  packHierarchy: { stripsPerBox: number; tabletsPerStrip: number; stripSelling: number; tabletSelling: number }
+  packHierarchy: { boxLabel: string; stripsPerBox: number; stripLabel: string; tabletsPerStrip: number; unitLabel: string; stripSelling: number; tabletSelling: number }
   code: string
   barcode: string
   category: string
@@ -134,7 +134,7 @@ const alertOptions = [7, 14, 30, 60, 90, 180, 365]
 
 const emptyDraft = (): Draft => ({
   name: '', brandName: '', strength: '', batchNo: '', manufacturer: '', prescriptionRequired: false,
-  packHierarchyEnabled: false, packHierarchy: { stripsPerBox: 10, tabletsPerStrip: 10, stripSelling: 0, tabletSelling: 0 },
+  packHierarchyEnabled: true, packHierarchy: { boxLabel: 'Box', stripsPerBox: 10, stripLabel: 'Strip', tabletsPerStrip: 4, unitLabel: 'Tablet', stripSelling: 0, tabletSelling: 0 },
   code: '', barcode: '', category: 'Tablet', purchase: 0, selling: 0, expiry: '', alertBefore: 30,
   lowStock: 0, quantity: 0, unit: 'Box (box)', currency: 'AFN', supplierId: '', notes: '',
 })
@@ -178,8 +178,11 @@ const normalizeProduct = (raw: unknown, index: number): Product => {
     prescriptionRequired: Boolean(item.prescriptionRequired),
     packHierarchyEnabled: Boolean(item.packHierarchyEnabled),
     packHierarchy: {
+      boxLabel: asText(hierarchy.boxLabel, 'Box'),
       stripsPerBox: Math.max(1, n(hierarchy.stripsPerBox) || 10),
-      tabletsPerStrip: Math.max(1, n(hierarchy.tabletsPerStrip) || 10),
+      stripLabel: asText(hierarchy.stripLabel, 'Strip'),
+      tabletsPerStrip: Math.max(1, n(hierarchy.tabletsPerStrip) || 4),
+      unitLabel: asText(hierarchy.unitLabel || hierarchy.tabletLabel, 'Tablet'),
       stripSelling: Math.max(0, n(hierarchy.stripSelling)),
       tabletSelling: Math.max(0, n(hierarchy.tabletSelling)),
     },
@@ -368,7 +371,8 @@ export default function Medicines({ language, globalSearch = '' }: { language: L
       ...draft, id, name, code, barcode, brandName: draft.brandName.trim(), strength: draft.strength.trim(), batchNo: draft.batchNo.trim(), manufacturer: draft.manufacturer.trim(),
       purchase: Math.max(0, n(draft.purchase)), selling: Math.max(0, n(draft.selling)), quantity: Math.max(0, n(draft.quantity)), lowStock: Math.max(0, n(draft.lowStock)),
       alertBefore: Math.max(1, n(draft.alertBefore) || 30), unit: draft.packHierarchyEnabled ? 'Box (box)' : draft.unit,
-      packHierarchy: { stripsPerBox: Math.max(1, n(draft.packHierarchy.stripsPerBox) || 10), tabletsPerStrip: Math.max(1, n(draft.packHierarchy.tabletsPerStrip) || 10), stripSelling: Math.max(0, n(draft.packHierarchy.stripSelling)), tabletSelling: Math.max(0, n(draft.packHierarchy.tabletSelling)) },
+      packHierarchyEnabled: Boolean(draft.packHierarchyEnabled),
+      packHierarchy: { boxLabel: draft.packHierarchy.boxLabel.trim() || 'Box', stripsPerBox: Math.max(1, n(draft.packHierarchy.stripsPerBox) || 10), stripLabel: draft.packHierarchy.stripLabel.trim() || 'Strip', tabletsPerStrip: Math.max(1, n(draft.packHierarchy.tabletsPerStrip) || 4), unitLabel: draft.packHierarchy.unitLabel.trim() || 'Tablet', stripSelling: Math.max(0, n(draft.packHierarchy.stripSelling)), tabletSelling: Math.max(0, n(draft.packHierarchy.tabletSelling)) },
       createdAt: existing?.createdAt || now, updatedAt: now,
     }
     let nextProducts = editingId ? products.map((p) => p.id === editingId ? product : p) : [product, ...products]
@@ -570,7 +574,7 @@ function MedicineModal(props: any) {
         <Field label={t.unit}><div className="flex gap-2"><select value={draft.unit} onChange={(e)=>setDraft((d:Draft)=>({...d,unit:e.target.value}))} className="form-control">{units.map((u:string)=><option key={u} value={u}>{localizeUnit(u, language)}</option>)}</select><button type="button" onClick={()=>setShowUnitAdd(!showUnitAdd)} className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 dark:border-[#24365f]"><Plus size={15}/></button></div>{showUnitAdd&&<div className="mt-2 flex gap-2"><input value={unitNew} onChange={(e)=>setUnitNew(e.target.value)} className="form-control"/><button type="button" onClick={addUnit} className="rounded-lg bg-[#172a57] px-3 text-xs font-bold text-white">{t.addCategory}</button></div>}</Field>
         <Field label={t.currency}><select value={draft.currency} onChange={(e)=>setDraft((d:Draft)=>({...d,currency:e.target.value}))} className="form-control">{currencies.map((c)=><option key={c}>{c}</option>)}</select></Field>
         <Field label={t.lowStockLimit}><input type="number" min="0" step="any" value={draft.lowStock} onChange={(e)=>setDraft((d:Draft)=>({...d,lowStock:n(e.target.value)}))} className="form-control"/><div className="mt-1 text-[10px] text-slate-400">{t.lowStockHint}</div></Field>
-        <Field label={t.packHierarchy} full><button type="button" onClick={()=>setDraft((d:Draft)=>({...d,packHierarchyEnabled:!d.packHierarchyEnabled}))} className="flex w-full items-center justify-between rounded-xl border border-slate-200 p-3 text-start dark:border-[#24365f]"><span><b className="text-xs">{t.packHierarchy}</b><span className="mt-1 block text-[10px] text-slate-400">{t.packHint}</span></span><span className={`h-5 w-9 rounded-full p-0.5 transition ${draft.packHierarchyEnabled?'bg-amber-500':'bg-slate-300 dark:bg-slate-600'}`}><span className={`block h-4 w-4 rounded-full bg-white transition ${draft.packHierarchyEnabled?'translate-x-4 rtl:-translate-x-4':''}`}/></span></button>{draft.packHierarchyEnabled&&<div className="mt-2 grid gap-2 sm:grid-cols-2"><input type="number" value={draft.packHierarchy.stripsPerBox} onChange={(e)=>setDraft((d:Draft)=>({...d,packHierarchy:{...d.packHierarchy,stripsPerBox:n(e.target.value)}}))} className="form-control" placeholder="Strips / box"/><input type="number" value={draft.packHierarchy.tabletsPerStrip} onChange={(e)=>setDraft((d:Draft)=>({...d,packHierarchy:{...d.packHierarchy,tabletsPerStrip:n(e.target.value)}}))} className="form-control" placeholder="Tablets / strip"/></div>}</Field>
+        <Field label={t.packHierarchy} full><div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-[#24365f] dark:bg-white/[0.03]"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="inline-flex items-center gap-2 text-sm font-bold"><Package size={16}/>{t.packHierarchy}</div><div className="text-[10px] text-slate-500 dark:text-slate-400">{t.packHint}</div></div><div className="grid gap-3 sm:grid-cols-3"><label><span className="mb-1 block text-[11px] font-semibold">{language==='English'?'Box label':language==='دری'?'نام قطعی':'د بکس نوم'}</span><input value={draft.packHierarchy.boxLabel} onChange={(e)=>setDraft((d:Draft)=>({...d,packHierarchyEnabled:true,packHierarchy:{...d.packHierarchy,boxLabel:e.target.value}}))} className="form-control" placeholder="Box"/></label><label><span className="mb-1 block text-[11px] font-semibold">{language==='English'?'Strips per box':language==='دری'?'تعداد پته در هر قطعی':'په هر بکس کې پټې'}</span><input type="number" min="1" step="1" value={draft.packHierarchy.stripsPerBox} onChange={(e)=>setDraft((d:Draft)=>({...d,packHierarchyEnabled:true,packHierarchy:{...d.packHierarchy,stripsPerBox:n(e.target.value)}}))} className="form-control"/></label><label><span className="mb-1 block text-[11px] font-semibold">{language==='English'?'Strip label':language==='دری'?'نام پته':'د پټې نوم'}</span><input value={draft.packHierarchy.stripLabel} onChange={(e)=>setDraft((d:Draft)=>({...d,packHierarchyEnabled:true,packHierarchy:{...d.packHierarchy,stripLabel:e.target.value}}))} className="form-control" placeholder="Strip"/></label><label><span className="mb-1 block text-[11px] font-semibold">{language==='English'?'Units per strip':language==='دری'?'تعداد تابلیت در هر پته':'په هره پټه کې واحدونه'}</span><input type="number" min="1" step="1" value={draft.packHierarchy.tabletsPerStrip} onChange={(e)=>setDraft((d:Draft)=>({...d,packHierarchyEnabled:true,packHierarchy:{...d.packHierarchy,tabletsPerStrip:n(e.target.value)}}))} className="form-control"/></label><label><span className="mb-1 block text-[11px] font-semibold">{language==='English'?'Unit label':language==='دری'?'نام واحد':'د واحد نوم'}</span><input value={draft.packHierarchy.unitLabel} onChange={(e)=>setDraft((d:Draft)=>({...d,packHierarchyEnabled:true,packHierarchy:{...d.packHierarchy,unitLabel:e.target.value}}))} className="form-control" placeholder="Tablet"/></label></div></div></Field>
         <Field label={t.prescription} full><button type="button" onClick={()=>setDraft((d:Draft)=>({...d,prescriptionRequired:!d.prescriptionRequired}))} className="flex w-full items-center justify-between rounded-xl border border-slate-200 p-3 text-start dark:border-[#24365f]"><span><b className="text-xs">{t.prescription}</b><span className="mt-1 block text-[10px] text-slate-400">{t.prescriptionHint}</span></span>{draft.prescriptionRequired?<Check size={20} className="text-emerald-500"/>:<span className="h-5 w-5 rounded-md border border-slate-300 dark:border-slate-600"/>}</button></Field>
         <Field label={t.supplier} full><div className="rounded-xl border border-slate-200 p-3 dark:border-[#24365f]"><div className="mb-2 text-[10px] text-slate-400">{t.supplierHint}</div><div className="flex gap-2"><select value={draft.supplierId} onChange={(e)=>setDraft((d:Draft)=>({...d,supplierId:e.target.value}))} className="form-control"><option value="">{t.selectSupplier}</option>{suppliers.map((s:Supplier)=><option key={s.id} value={s.id}>{supplierName(s)}</option>)}</select><button type="button" onClick={onAddSupplier} className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 dark:border-[#24365f]"><Plus size={16}/></button></div></div></Field>
       </div>
