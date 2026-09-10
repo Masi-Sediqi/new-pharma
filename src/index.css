@@ -1,0 +1,399 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #0f172a;
+  background: #f8fafc;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { min-height: 100%; margin: 0; }
+body { background: #f8fafc; }
+button, input { font: inherit; }
+
+@keyframes app-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes app-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes app-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.page-fade {
+  animation: app-fade-in .24s ease-out;
+}
+
+.app-panel,
+.stat-card,
+.stat-lite,
+.theme-option {
+  animation: app-fade-in .22s ease-out;
+}
+
+.modal-backdrop,
+.fixed.inset-0[class*="bg-black"] {
+  min-height: 100vh;
+  height: 100vh;
+  animation: app-backdrop-in .18s ease-out both;
+}
+
+.modal-card,
+.modal-backdrop > *,
+.fixed.inset-0[class*="bg-black"] > section,
+.fixed.inset-0[class*="bg-black"] > form,
+.fixed.inset-0[class*="bg-black"] > div {
+  animation: app-pop-in .22s ease-out both;
+}
+
+[class*="absolute"][class*="z-"],
+[class*="fixed"][class*="z-"][class*="bg-white"],
+[class*="fixed"][class*="z-"][class*="dark:bg"] {
+  animation: app-pop-in .18s ease-out both;
+}
+
+button,
+input,
+select,
+textarea {
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+  transition-duration: .18s;
+  transition-timing-function: ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+
+[data-theme="minimalism"] body,
+[data-theme="minimalism"] .app-root {
+  background: #f8fafc;
+}
+
+[data-theme="claymorphism"] body,
+[data-theme="claymorphism"] .app-root {
+  background:
+    radial-gradient(circle at 18% 12%, rgba(255, 184, 108, .35), transparent 28%),
+    radial-gradient(circle at 84% 8%, rgba(125, 211, 252, .32), transparent 26%),
+    #f4f7fb;
+}
+
+[data-theme="glassmorphism"] body,
+[data-theme="glassmorphism"] .app-root,
+[data-theme="liquidGlass"] body,
+[data-theme="liquidGlass"] .app-root {
+  background:
+    radial-gradient(circle at 12% 16%, rgba(45, 212, 191, .18), transparent 30%),
+    radial-gradient(circle at 88% 8%, rgba(96, 165, 250, .20), transparent 28%),
+    linear-gradient(135deg, #07111f 0%, #0d1426 48%, #101426 100%);
+}
+
+[data-theme="neonGlass"] body,
+[data-theme="neonGlass"] .app-root {
+  background:
+    radial-gradient(circle at 44% 34%, rgba(168, 85, 247, .22), transparent 34%),
+    radial-gradient(circle at 80% 20%, rgba(34, 211, 238, .10), transparent 28%),
+    #090f1d;
+}
+
+[data-theme="claymorphism"] .stat-card,
+[data-theme="claymorphism"] .app-panel,
+[data-theme="claymorphism"] .theme-option {
+  border-color: rgba(203, 213, 225, .55) !important;
+  background: linear-gradient(145deg, #ffffff, #e8eef7) !important;
+  box-shadow: 9px 9px 18px rgba(148, 163, 184, .28), -9px -9px 18px rgba(255, 255, 255, .9) !important;
+}
+
+[data-theme="glassmorphism"] .stat-card,
+[data-theme="glassmorphism"] .app-panel,
+[data-theme="glassmorphism"] .theme-option {
+  border-color: rgba(148, 163, 184, .58) !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, .07)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), 0 12px 28px rgba(2, 6, 23, .22) !important;
+  backdrop-filter: blur(18px);
+}
+
+[data-theme="liquidGlass"] .stat-card,
+[data-theme="liquidGlass"] .app-panel,
+[data-theme="liquidGlass"] .theme-option {
+  border-color: rgba(125, 211, 252, .50) !important;
+  background:
+    linear-gradient(130deg, rgba(139, 92, 246, .18), rgba(34, 211, 238, .12) 46%, rgba(251, 191, 36, .10)),
+    rgba(15, 23, 42, .72) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 14px 34px rgba(56, 189, 248, .10) !important;
+  backdrop-filter: blur(20px) saturate(1.2);
+}
+
+[data-theme="neonGlass"] .stat-card,
+[data-theme="neonGlass"] .app-panel,
+[data-theme="neonGlass"] .theme-option {
+  border-color: rgba(168, 85, 247, .75) !important;
+  background: rgba(16, 18, 34, .82) !important;
+  box-shadow: 0 0 0 1px rgba(168, 85, 247, .18), 0 0 18px rgba(168, 85, 247, .20) !important;
+}
+
+[data-theme="neonGlass"] .stat-card:nth-child(6n + 2) {
+  border-color: rgba(34, 211, 238, .78) !important;
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, .18), 0 0 26px rgba(34, 211, 238, .20) !important;
+}
+
+.theme-preview {
+  display: grid;
+  height: 72px;
+  place-items: center;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.theme-preview-pill {
+  display: grid;
+  width: 72%;
+  height: 44px;
+  place-items: center;
+  border-radius: 8px;
+  font-weight: 800;
+}
+
+.theme-preview-minimalism {
+  background: #1d2b4f;
+}
+
+.theme-preview-minimalism .theme-preview-pill {
+  color: white;
+  background: #111a2d;
+  border: 1px solid #2e4375;
+}
+
+.theme-preview-claymorphism {
+  background: #e8f0f8;
+}
+
+.theme-preview-claymorphism .theme-preview-pill {
+  color: white;
+  background: #edf3f9;
+  box-shadow: 10px 10px 22px rgba(148, 163, 184, .35), -10px -10px 22px rgba(255, 255, 255, .92);
+}
+
+.theme-preview-glassmorphism {
+  background: linear-gradient(105deg, #60a5fa, #22d3ee);
+}
+
+.theme-preview-glassmorphism .theme-preview-pill,
+.theme-preview-liquidGlass .theme-preview-pill {
+  color: #06101f;
+  border: 1px solid rgba(255, 255, 255, .65);
+  background: rgba(255, 255, 255, .36);
+  backdrop-filter: blur(10px);
+}
+
+.theme-preview-liquidGlass {
+  background: linear-gradient(105deg, #818cf8, #7dd3fc, #2dd4bf);
+}
+
+.theme-preview-neonGlass {
+  background: linear-gradient(105deg, #1d0f34, #05070d);
+}
+
+.theme-preview-neonGlass .theme-preview-pill {
+  color: white;
+  background: rgba(13, 8, 30, .72);
+  border: 1px solid rgba(167, 139, 250, .9);
+  box-shadow: 0 0 22px rgba(168, 85, 247, .75);
+}
+
+@layer components {
+  .form-control {
+    @apply h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 dark:border-[#24365f] dark:bg-[#0c1424] dark:text-white dark:placeholder:text-slate-500;
+  }
+
+  .form-control:focus {
+    border-color: #172a57;
+    box-shadow: 0 0 0 2px rgba(23, 42, 87, 0.15);
+  }
+
+  .dark .form-control:focus {
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.20);
+  }
+}
+
+@media print {
+  body * { visibility: hidden !important; }
+  .fixed.inset-0.z-\[80\] section,
+  .fixed.inset-0.z-\[80\] section * { visibility: visible !important; }
+  .fixed.inset-0.z-\[80\] section {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    min-height: 100vh !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+  }
+}
+
+
+/* Shared modal surface: always above the full app, blocks interaction behind it. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: 16px;
+  background: rgba(2, 6, 23, 0.72);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  overscroll-behavior: contain;
+}
+.modal-card {
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 24px 70px rgba(2, 6, 23, .38);
+}
+.dark .modal-card {
+  border-color: #24365f;
+  background: #0c1424;
+  color: #f8fafc;
+}
+.dark .app-panel,
+.dark .stat-card {
+  color: #f8fafc;
+}
+.dark .app-panel table,
+.dark .stat-card table {
+  color: #e2e8f0;
+}
+.dark select option {
+  background: #0c1424;
+  color: #f8fafc;
+}
+.dark textarea.form-control {
+  background: #0c1424;
+  color: #f8fafc;
+}
+
+/* 2026-09 Staff/Billing integration fixes */
+.billing-layout{display:grid!important;grid-template-columns:minmax(300px,390px) minmax(0,1fr)!important;align-items:start!important}
+.billing-sidebar{min-width:0!important}.billing-content{min-width:0!important}
+[dir="ltr"] .billing-sidebar{grid-column:1}[dir="ltr"] .billing-content{grid-column:2}
+[dir="rtl"] .billing-layout{grid-template-columns:minmax(0,1fr) minmax(300px,390px)!important}
+[dir="rtl"] .billing-sidebar{grid-column:2}[dir="rtl"] .billing-content{grid-column:1}
+@media(max-width:1023px){.billing-layout{grid-template-columns:1fr!important}[dir="rtl"] .billing-sidebar,[dir="rtl"] .billing-content{grid-column:auto}}
+.app-btn-primary,.app-btn-secondary{display:inline-flex;min-height:40px;align-items:center;justify-content:center;gap:.5rem;border-radius:.6rem;padding:0 .9rem;font-size:.875rem;font-weight:700;transition:.18s}
+.app-btn-primary{background:#172a57;color:#fff}.app-btn-secondary{border:1px solid #dbe3ee;background:#fff;color:#172033}
+.dark .app-btn-primary{background:#f59e0b;color:#07101f}.dark .app-btn-secondary{border-color:#2b3a60;background:#101a2d;color:#f8fafc}
+.stat-lite{display:flex;min-height:88px;align-items:center;justify-content:space-between;border:1px solid #dde5ef;border-left:4px solid #172a57;border-radius:.75rem;background:#fff;padding:1rem;box-shadow:0 2px 5px rgb(15 23 42 / .05)}
+.stat-lite.tone-blue{border-left-color:#0ea5e9}.stat-lite.tone-green{border-left-color:#22c55e}.stat-lite.tone-orange{border-left-color:#f59e0b}.icon-box{display:grid;width:38px;height:38px;place-items:center;border-radius:.65rem;background:#f1f5f9;color:#172a57}.icon-box svg{width:18px;height:18px;stroke:currentColor!important}
+.dark .stat-lite{border-color:#314264;background:#111a2c;color:#f8fafc}.dark .icon-box{background:#1c2942;color:#eaf2ff!important}.dark .icon-box svg{color:#eaf2ff!important;stroke:#eaf2ff!important}
+.dark .app-panel svg:not(.text-red-500):not(.text-emerald-500):not(.text-amber-500){stroke:currentColor}
+.modal-backdrop{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;overflow:auto;background:rgba(2,6,23,.72);padding:20px;backdrop-filter:blur(1px)}
+.modal-card{width:100%;max-height:calc(100vh - 40px);overflow:auto;border:1px solid #e2e8f0;border-radius:14px;background:#fff;padding:22px;color:#0f172a;box-shadow:0 30px 80px rgba(0,0,0,.35)}
+.dark .modal-card{border-color:#33466c;background:#0f192b;color:#f8fafc}.dark .modal-card svg{stroke:#eaf2ff!important}.dark .form-control{color:#f8fafc;background:#0b1425;border-color:#304163}.dark .form-control::placeholder{color:#7f91ae}.dark select.form-control option{background:#0f192b;color:#f8fafc}
+
+/* Settings module controls */
+.field-label{display:block;font-size:.82rem;font-weight:600;color:#334155}.dark .field-label{color:#cbd5e1}
+.input-ui{height:42px;width:100%;border:1px solid #dbe3ee;border-radius:.65rem;background:#fff;padding:0 .8rem;color:#0f172a;outline:none}.input-ui:focus{border-color:#1e3a6d;box-shadow:0 0 0 2px rgba(30,58,109,.08)}.dark .input-ui{border-color:#314260;background:#0c1628;color:#fff}.dark .input-ui option{background:#0c1628;color:#fff}
+.primary-btn,.secondary-btn{display:inline-flex;height:40px;align-items:center;justify-content:center;gap:.5rem;border-radius:.65rem;padding:0 1rem;font-size:.875rem;font-weight:600}.primary-btn{background:#172a57;color:#fff}.dark .primary-btn{background:#f59e0b;color:#071124}.secondary-btn{border:1px solid #dbe3ee;background:#fff;color:#172033}.dark .secondary-btn{border-color:#314260;background:#111a2c;color:#fff}.empty-box{display:grid;min-height:140px;place-items:center;border:1px dashed #dbe3ee;border-radius:.8rem;color:#94a3b8}.dark .empty-box{border-color:#314260}
+
+
+/* Billing RTL layout fix (Dari / Pashto)
+   Mirror the English split layout without stacking the form panels. */
+.billing-page-rtl .billing-layout.billing-layout-rtl {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 390px) !important;
+  align-items: start !important;
+  width: 100% !important;
+  gap: 1.25rem !important;
+}
+.billing-page-rtl .billing-sidebar,
+.billing-page-rtl .billing-content {
+  max-width: none !important;
+  min-width: 0 !important;
+}
+.billing-page-rtl .billing-sidebar {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  width: 100% !important;
+}
+.billing-page-rtl .billing-content {
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+  width: 100% !important;
+}
+.billing-page-rtl .app-panel {
+  text-align: right;
+}
+.billing-page-rtl .form-control {
+  direction: rtl;
+  text-align: right;
+}
+.billing-page-rtl input[type="number"],
+.billing-page-rtl input[type="date"] {
+  direction: ltr;
+}
+.billing-page-rtl input[type="number"] {
+  text-align: right;
+}
+.billing-page-rtl input[type="date"] {
+  text-align: left;
+}
+.billing-page-rtl select.form-control {
+  padding-inline-start: .75rem;
+  padding-inline-end: 2rem;
+}
+.billing-page-rtl .billing-content .app-panel {
+  width: 100%;
+}
+@media (min-width: 1024px) {
+  .billing-page-rtl .billing-layout.billing-layout-rtl {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 390px) !important;
+  }
+}
+@media (max-width: 1023px) {
+  .billing-page-rtl .billing-layout.billing-layout-rtl {
+    grid-template-columns: 1fr !important;
+  }
+  .billing-page-rtl .billing-sidebar,
+  .billing-page-rtl .billing-content {
+    grid-column: auto !important;
+    grid-row: auto !important;
+  }
+}
