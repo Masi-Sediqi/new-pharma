@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { Language } from '../i18n'
 
 type DashboardFilter = 'all' | 'today' | 'week' | 'month' | 'year' | 'custom'
@@ -27,7 +27,7 @@ const round = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100
 const labels = {
   English: {
     title: 'Trends', revenue: 'Collected Revenue', expenses: 'Expenses', refunds: 'Refunds',
-    pending: 'Pending Payments', sales: 'Sales Value', empty: 'No financial activity in this period', amount: 'Amount',
+    pending: 'Pending Payments', sales: 'Sales', empty: 'No financial activity in this period', amount: 'Amount',
   },
   دری: {
     title: 'روند مالی', revenue: 'عواید دریافت‌شده', expenses: 'مصارف', refunds: 'بازپرداخت‌ها',
@@ -132,17 +132,23 @@ function buildBuckets(filter: DashboardFilter, language: Language, invoices: Row
 
 function niceMax(value: number) {
   if (value <= 0) return 1
-  const power = Math.pow(10, Math.floor(Math.log10(value)))
-  const scaled = value / power
-  const nice = scaled <= 1 ? 1 : scaled <= 2 ? 2 : scaled <= 5 ? 5 : 10
-  return nice * power
+  const rawStep = value / 4
+  const power = Math.pow(10, Math.floor(Math.log10(rawStep)))
+  const scaled = rawStep / power
+  const niceStep = scaled <= 1 ? 1 : scaled <= 2 ? 2 : scaled <= 3 ? 3 : scaled <= 5 ? 5 : 10
+  return niceStep * power * 4
 }
 
 function fmtMoney(value: number) {
   return value.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' ؋'
 }
 
+function fmtAxis(value: number) {
+  return value.toLocaleString(undefined, { maximumFractionDigits: 0 })
+}
+
 export default function TrendChart({ invoices = [], expenses = [], filter = 'month', language = 'English' }: Partial<Props>) {
+  const [hovered, setHovered] = useState<number | null>(null)
   const safeInvoices = Array.isArray(invoices) ? invoices : []
   const safeExpenses = Array.isArray(expenses) ? expenses : []
   const safeFilter: DashboardFilter = filter || 'month'
@@ -198,7 +204,7 @@ export default function TrendChart({ invoices = [], expenses = [], filter = 'mon
     return { points: pts, maxY: niceMax(highest) }
   }, [safeFilter, safeLanguage, safeInvoices, safeExpenses])
 
-  const W = 1200, H = 270, left = 72, right = 24, top = 18, bottom = 54
+  const W = 1200, H = 275, left = 58, right = 24, top = 18, bottom = 42
   const plotW = W - left - right, plotH = H - top - bottom
   const x = (i: number) => left + (points.length <= 1 ? plotW / 2 : (i / (points.length - 1)) * plotW)
   const y = (v: number) => top + plotH - (v / maxY) * plotH
@@ -206,35 +212,60 @@ export default function TrendChart({ invoices = [], expenses = [], filter = 'mon
     ['revenue', t.revenue], ['expenses', t.expenses], ['refunds', t.refunds], ['pending', t.pending], ['sales', t.sales],
   ] as const
   const hasData = points.some(p => p.revenue || p.expenses || p.refunds || p.pending || p.sales)
-  const labelEvery = points.length > 20 ? 3 : points.length > 12 ? 2 : 1
+  const labelEvery = points.length > 24 ? 1 : points.length > 14 ? 2 : 1
+  const hoveredPoint = hovered === null ? null : points[hovered]
+  const tooltipW = 170
+  const tooltipH = 122
+  const tooltipX = hovered === null ? 0 : Math.min(Math.max(x(hovered) + 14, left + 6), W - right - tooltipW)
+  const tooltipY = top + 4
 
   return (
     <section className="app-panel rounded-xl border border-slate-200 bg-white p-5 shadow-soft dark:border-[#24365f] dark:bg-[#111a2c]">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{t.title}</h3>
-        <div className="flex flex-wrap justify-end gap-x-4 gap-y-2 text-[11px] text-slate-600 dark:text-slate-300">
-          {series.map(([key, label]) => <span key={key} className="flex items-center gap-1.5"><i className="h-0.5 w-3 rounded-full" style={{ backgroundColor: COLORS[key] }}/>{label}</span>)}
-        </div>
       </div>
-      <div className="mt-4 min-h-[280px] w-full overflow-x-auto">
+      <div className="mt-4 w-full">
         {!hasData ? (
           <div className="grid h-[260px] place-items-center rounded-lg border border-dashed border-slate-200 text-sm text-slate-400 dark:border-[#24365f] dark:text-slate-400">{t.empty}</div>
         ) : (
-          <svg viewBox={`0 0 ${W} ${H}`} className="h-[280px] min-w-[760px] w-full" role="img" aria-label={t.title}>
+          <svg viewBox={`0 0 ${W} ${H}`} className="h-[275px] w-full overflow-visible" role="img" aria-label={t.title} onMouseLeave={() => setHovered(null)}>
             {[0, 0.25, 0.5, 0.75, 1].map((r) => {
               const yy = top + plotH * (1 - r)
-              return <g key={r}><line x1={left} x2={W-right} y1={yy} y2={yy} stroke="currentColor" className="text-slate-200 dark:text-[#24365f]" strokeDasharray="3 4"/><text x={left-10} y={yy+4} textAnchor="end" fontSize="10" fill="currentColor" className="text-slate-500 dark:text-slate-400">{fmtMoney(maxY*r)}</text></g>
+              return <g key={r}><line x1={left} x2={W-right} y1={yy} y2={yy} stroke="currentColor" className="text-slate-200 dark:text-[#24365f]" strokeDasharray="3 4"/><text x={left-8} y={yy+4} textAnchor="end" fontSize="11" fill="currentColor" className="text-slate-500 dark:text-slate-400">{fmtAxis(maxY*r)}</text></g>
             })}
+            {points.map((p, i) => (
+              <g key={`${p.key}-grid`}>
+                <line x1={x(i)} x2={x(i)} y1={top} y2={top + plotH} stroke="currentColor" className="text-slate-100 dark:text-[#1d2d4e]" strokeDasharray="3 4"/>
+                {(i % labelEvery === 0 || i === points.length-1) && <text x={x(i)} y={H-16} textAnchor="middle" fontSize="10" fill="currentColor" className="text-slate-500 dark:text-slate-400">{p.label}</text>}
+              </g>
+            ))}
             <line x1={left} x2={left} y1={top} y2={top+plotH} stroke="currentColor" className="text-slate-400 dark:text-[#47618f]"/>
             <line x1={left} x2={W-right} y1={top+plotH} y2={top+plotH} stroke="currentColor" className="text-slate-400 dark:text-[#47618f]"/>
-            {points.map((p, i) => i % labelEvery === 0 || i === points.length-1 ? <text key={p.key} x={x(i)} y={H-24} textAnchor="middle" fontSize="10" fill="currentColor" className="text-slate-500 dark:text-slate-400">{p.label}</text> : null)}
             {series.map(([key]) => {
               const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(2)} ${y(p[key]).toFixed(2)}`).join(' ')
               return <g key={key}><path d={path} fill="none" stroke={COLORS[key]} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"/>{points.map((p,i)=>p[key]>0?<circle key={p.key} cx={x(i)} cy={y(p[key])} r="3.2" fill={COLORS[key]}><title>{`${p.label} — ${series.find(s=>s[0]===key)?.[1]}: ${fmtMoney(p[key])}`}</title></circle>:null)}</g>
             })}
+            {points.map((p, i) => <rect key={`${p.key}-hit`} x={x(i) - 10} y={top} width="20" height={plotH} fill="transparent" onMouseEnter={() => setHovered(i)} />)}
+            {hoveredPoint && hovered !== null && (
+              <g pointerEvents="none">
+                <line x1={x(hovered)} x2={x(hovered)} y1={top} y2={top + plotH} stroke="#94a3b8" strokeWidth="1"/>
+                <rect x={tooltipX} y={tooltipY} width={tooltipW} height={tooltipH} rx="8" fill="white" stroke="#e2e8f0" filter="drop-shadow(0 12px 18px rgb(15 23 42 / 0.14))"/>
+                <text x={tooltipX + 12} y={tooltipY + 22} fontSize="12" fontWeight="600" fill="#0f172a">{hoveredPoint.label}</text>
+                {series.map(([key, label], i) => (
+                  <text key={`${key}-tip`} x={tooltipX + 12} y={tooltipY + 46 + i * 18} fontSize="12" fill={COLORS[key]}>
+                    {label}: {fmtMoney(hoveredPoint[key])}
+                  </text>
+                ))}
+              </g>
+            )}
           </svg>
         )}
       </div>
+      {hasData && (
+        <div className="mt-2 flex flex-wrap justify-center gap-x-5 gap-y-2 text-[12px] text-slate-700 dark:text-slate-300">
+          {series.map(([key, label]) => <span key={key} className="flex items-center gap-1.5"><i className="h-0.5 w-4 rounded-full" style={{ backgroundColor: COLORS[key] }}/>{label}</span>)}
+        </div>
+      )}
     </section>
   )
 }

@@ -32,7 +32,9 @@ const walletText = {
     amount: 'Amount *',
     currency: 'Currency',
     note: 'Reason / Note',
-    placeholder: 'e.g. Owner injection from personal funds',
+    placeholder: 'e.g. Owner cash entry',
+    depositPlaceholder: 'e.g. Owner injection from personal funds',
+    withdrawPlaceholder: 'e.g. Personal expenses',
     saveDeposit: 'Save Deposit',
     saveWithdraw: 'Save Withdraw',
     cancel: 'Cancel',
@@ -48,7 +50,9 @@ const walletText = {
     amount: 'مقدار *',
     currency: 'واحد پول',
     note: 'دلیل / یادداشت',
-    placeholder: 'مثال: تزریق سرمایه از منابع شخصی',
+    placeholder: 'مثال: ثبت نقدی',
+    depositPlaceholder: 'مثال: تزریق سرمایه از منابع شخصی',
+    withdrawPlaceholder: 'مثال: مصارف شخصی',
     saveDeposit: 'ذخیره سپرده',
     saveWithdraw: 'ذخیره برداشت',
     cancel: 'لغو',
@@ -64,7 +68,9 @@ const walletText = {
     amount: 'مقدار *',
     currency: 'اسعار',
     note: 'دلیل / یادښت',
-    placeholder: 'بېلګه: له شخصي پیسو څخه پانګه اچونه',
+    placeholder: 'بېلګه: نغدي ثبت',
+    depositPlaceholder: 'بېلګه: له شخصي پیسو څخه پانګه اچونه',
+    withdrawPlaceholder: 'بېلګه: شخصي لګښتونه',
     saveDeposit: 'سپارنه خوندي کړئ',
     saveWithdraw: 'برداشت خوندي کړئ',
     cancel: 'لغوه',
@@ -566,53 +572,91 @@ export default function Header({ isRtl, language, onMenuClick, onLanguageChange,
       </header>
 
       {cashOpen && (
-        <div className="modal-backdrop fixed inset-0 z-50 grid place-items-center bg-black/75 px-4">
-          <section dir={isRtl ? 'rtl' : 'ltr'} className="modal-card w-full max-w-[440px] rounded-lg border border-slate-200 bg-white p-6 text-slate-950 shadow-2xl dark:border-slate-200 dark:bg-white dark:text-slate-950">
+        <div className="modal-backdrop fixed inset-0 z-50 grid place-items-center bg-black/75 px-4 py-6 backdrop-blur-[2px]">
+          <section dir={isRtl ? 'rtl' : 'ltr'} className="modal-card w-full max-w-[440px] rounded-lg border border-slate-200 bg-white p-6 text-slate-950 shadow-[0_26px_80px_rgba(15,23,42,0.34)] dark:border-slate-200 dark:bg-white dark:text-slate-950">
             <div className="flex items-start gap-3">
-              <WalletCards size={21} className="mt-0.5 text-[#172a57]" />
               <div className="min-w-0 flex-1">
-                <h2 className="text-xl font-extrabold">{wt.title}</h2>
-                <p className="mt-1 text-sm text-slate-500">{wt.subtitle}</p>
+                <h2 className="flex items-center gap-2 text-xl font-extrabold leading-6 tracking-tight">
+                  <WalletCards size={21} className="text-[#172a57]" />
+                  {wt.title}
+                </h2>
+                <p className="mt-2 text-[15px] leading-6 text-slate-500">{wt.subtitle}</p>
               </div>
-              <button aria-label={wt.close} onClick={closeCashWallet} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-950">
+              <button aria-label={wt.close} onClick={closeCashWallet} className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-950">
                 <X size={18} />
               </button>
             </div>
-            <div className="mt-5 grid grid-cols-2 rounded-lg bg-slate-100 p-1">
-              {(['Deposit', 'Withdraw'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  onClick={() => setWalletMode(mode)}
-                  className={`flex h-10 items-center justify-center gap-2 rounded-md text-sm font-semibold transition ${
-                    walletMode === mode
-                      ? 'bg-emerald-500 text-white'
-                      : 'text-slate-600 hover:bg-white'
-                  }`}
-                >
-                  <span className="grid h-4 w-4 place-items-center rounded-full border text-[10px]">{mode === 'Deposit' ? '↓' : '↑'}</span>
-                  {mode === 'Deposit' ? wt.deposit : wt.withdraw}
-                </button>
-              ))}
+
+            <div className="mt-4 rounded-lg bg-slate-100 p-1">
+              <div className="grid grid-cols-2 gap-1.5">
+                {(['Deposit', 'Withdraw'] as const).map((mode) => {
+                  const active = walletMode === mode
+                  const activeClass = mode === 'Deposit'
+                    ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/25 hover:bg-emerald-600'
+                    : 'bg-red-500 text-white shadow-sm shadow-red-500/25 hover:bg-red-600'
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setWalletMode(mode)}
+                      className={`flex h-10 items-center justify-center gap-2 rounded-md text-sm font-bold transition ${active ? activeClass : 'bg-transparent text-slate-500 hover:bg-white hover:text-slate-900'}`}
+                    >
+                      {mode === 'Deposit' ? <Download size={16} /> : <Upload size={16} />}
+                      {mode === 'Deposit' ? wt.deposit : wt.withdraw}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_190px]">
-              <label className="text-sm font-medium">
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_190px]">
+              <label className="block text-sm font-semibold text-slate-700">
                 {wt.amount}
-                <input className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-[#172a57] focus:bg-white focus:ring-2 focus:ring-[#172a57]/25" type="number" min="0" step="0.01" value={walletAmount} onChange={(event) => setWalletAmount(event.target.value)} placeholder="0.00" />
+                <input
+                  className="mt-2 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#172a57] focus:ring-3 focus:ring-[#172a57]/10"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={walletAmount}
+                  onChange={(event) => setWalletAmount(event.target.value)}
+                  placeholder="0.00"
+                />
               </label>
-              <label className="text-sm font-medium">
+              <label className="block text-sm font-semibold text-slate-700">
                 {wt.currency}
-                <select value={walletCurrency} onChange={(event) => setWalletCurrency(event.target.value)} className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-[#172a57] focus:bg-white focus:ring-2 focus:ring-[#172a57]/25">
+                <select
+                  value={walletCurrency}
+                  onChange={(event) => setWalletCurrency(event.target.value)}
+                  className="mt-2 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition focus:border-[#172a57] focus:ring-3 focus:ring-[#172a57]/10"
+                >
                   {currencies.map(({ code, symbol }) => <option key={code} value={code}>{symbol} {code}</option>)}
                 </select>
               </label>
             </div>
-            <label className="mt-4 block text-sm font-medium">
+
+            <label className="mt-4 block text-sm font-semibold text-slate-700">
               {wt.note}
-              <textarea value={walletNote} onChange={(event) => setWalletNote(event.target.value)} className="mt-2 h-20 w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none placeholder:text-slate-400 focus:border-[#172a57] focus:bg-white focus:ring-2 focus:ring-[#172a57]/25" placeholder={wt.placeholder} />
+              <textarea
+                value={walletNote}
+                onChange={(event) => setWalletNote(event.target.value)}
+                className="mt-2 min-h-[80px] w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#172a57] focus:ring-3 focus:ring-[#172a57]/10"
+                placeholder={walletMode === 'Deposit' ? (wt as any).depositPlaceholder || wt.placeholder : (wt as any).withdrawPlaceholder || wt.placeholder}
+              />
             </label>
-            <div className="mt-6 flex justify-end gap-2">
-              <button onClick={closeCashWallet} className="h-10 rounded-lg border border-slate-200 px-4 text-sm font-semibold hover:bg-slate-50">{wt.cancel}</button>
-              <button onClick={saveCashWallet} className="h-10 rounded-lg bg-emerald-500 px-4 text-sm font-bold text-white hover:bg-emerald-600">
+
+            <div className="mt-6 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeCashWallet}
+                className="h-10 rounded-lg border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+              >
+                {wt.cancel}
+              </button>
+              <button
+                type="button"
+                onClick={saveCashWallet}
+                className={`h-10 rounded-lg px-5 text-sm font-bold text-white transition ${walletMode === 'Deposit' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-red-500 hover:bg-red-600'}`}
+              >
                 {walletMode === 'Deposit' ? wt.saveDeposit : wt.saveWithdraw}
               </button>
             </div>

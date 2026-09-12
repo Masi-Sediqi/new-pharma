@@ -227,7 +227,7 @@ const formatDashboardMoney = (value: number) => `${value.toLocaleString(undefine
 const currencyMatches = (recordCurrency: unknown, filterCurrency: string) => !filterCurrency || filterCurrency === 'all' || String(recordCurrency || 'AFN').toUpperCase() === filterCurrency.toUpperCase()
 
 function recordDate(record: any): Date | null {
-  const raw = record?.createdAt || record?.updatedAt || record?.date || record?.invoiceDate || record?.expenseDate || record?.purchaseDate || record?.paidAt
+  const raw = record?.date || record?.invoiceDate || record?.expenseDate || record?.purchaseDate || record?.paidAt || record?.createdAt || record?.updatedAt
   const parsed = raw ? new Date(raw) : null
   return parsed && !Number.isNaN(parsed.getTime()) ? parsed : null
 }
@@ -238,11 +238,18 @@ function isWithinDashboardFilter(record: any, filter: DashboardFilter) {
   if (!date) return false
   const now = new Date()
   const start = new Date(now)
+  const end = new Date(now)
   if (filter === 'today') start.setHours(0, 0, 0, 0)
-  if (filter === 'week') start.setDate(now.getDate() - 7)
-  if (filter === 'month') start.setMonth(now.getMonth() - 1)
-  if (filter === 'year') start.setFullYear(now.getFullYear() - 1)
-  return date >= start && date <= now
+  if (filter === 'week') {
+    const day = now.getDay()
+    const mondayOffset = day === 0 ? 6 : day - 1
+    start.setDate(now.getDate() - mondayOffset)
+    start.setHours(0, 0, 0, 0)
+  }
+  if (filter === 'month') start.setFullYear(now.getFullYear(), now.getMonth(), 1)
+  if (filter === 'year') start.setFullYear(now.getFullYear(), 0, 1)
+  end.setHours(23, 59, 59, 999)
+  return date >= start && date <= end
 }
 
 function Dashboard({ filter, language, onFilterChange }: { filter: DashboardFilter; language: Language; onFilterChange: (filter: DashboardFilter) => void }) {
@@ -297,7 +304,10 @@ function Dashboard({ filter, language, onFilterChange }: { filter: DashboardFilt
   const medicinePurchaseWalletOut = transactions
     .filter((tx) => tx.source === 'product-registration-wallet')
     .reduce((sum, tx) => sum + num(tx.amount), 0)
-  const currentWallet = totalPaid - totalExpensesValue + manualWalletDelta - medicinePurchaseWalletOut
+  const godownPurchaseWalletOut = transactions
+    .filter((tx) => tx.source === 'cash-wallet' && tx.referenceSource === 'godown-purchase')
+    .reduce((sum, tx) => sum + num(tx.amount), 0)
+  const currentWallet = totalPaid - totalExpensesValue + manualWalletDelta - medicinePurchaseWalletOut - godownPurchaseWalletOut
   const supplierAdjustments = godownEntries.flatMap((entry) => Array.isArray(entry.adjustments) ? entry.adjustments.map((a: any) => ({...a, supplierId: a.supplierId || entry.supplierId})) : [])
   const supplierBalances = suppliersData.map((supplier) => {
     const opening = num(supplier.openingBalance ?? supplier.balance)

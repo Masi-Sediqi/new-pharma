@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 import QRCode from 'qrcode'
 import {
   Box, CalendarDays, Check, ChevronDown, Copy, Edit3, Eye, Package,
-  Pill, Plus, Printer, RefreshCcw, Search, Trash2, X,
+  Pill, Plus, Printer, RefreshCcw, Search, Trash2, WalletCards, X,
 } from 'lucide-react'
 import type { Language } from '../i18n'
 import { medicineCategoryLabels, medicineText, medicineUnitLabels } from '../i18n'
@@ -252,6 +252,68 @@ const localizeCategory = (value: string, language: Language) => (medicineCategor
 const localizeUnit = (value: string, language: Language) => (medicineUnitLabels[language] as Record<string, string>)[value] || value
 const notifyDataChanged = () => window.dispatchEvent(new CustomEvent('pharma:data-changed'))
 
+const walletCopy = {
+  English: {
+    pay: 'Pay from Cash Wallet',
+    balance: 'Current balance',
+    amount: 'Cash Wallet payment',
+    of: 'of',
+    canGoNegative: 'Payment is allowed even if the wallet balance becomes negative.',
+    overTotal: 'Cash Wallet payment cannot be greater than the purchase total.',
+  },
+  دری: {
+    pay: 'پرداخت از Cash Wallet',
+    balance: 'موجودی فعلی',
+    amount: 'مبلغ پرداخت از Cash Wallet',
+    of: 'از',
+    canGoNegative: 'حتی اگر موجودی کافی نباشد، پرداخت انجام می‌شود و همان واحد پول منفی می‌گردد.',
+    overTotal: 'مبلغ پرداخت از Cash Wallet نمی‌تواند بیشتر از مجموع خرید باشد.',
+  },
+  پښتو: {
+    pay: 'له Cash Wallet څخه تادیه',
+    balance: 'اوسنی موجودي',
+    amount: 'د Cash Wallet تادیه',
+    of: 'له',
+    canGoNegative: 'که موجودي کافي هم نه وي، تادیه کېږي او هماغه اسعار منفي کېږي.',
+    overTotal: 'د Cash Wallet تادیه د پېرود له ټول مبلغ څخه زیاته کېدای نشي.',
+  },
+} as const
+
+function cashWalletBalance(currency: string) {
+  const code = String(currency || 'AFN').toUpperCase()
+  const sameCurrency = (item: any) => String(item?.currency || 'AFN').toUpperCase() === code
+  const invoices = load<any[]>('billingInvoices', []).filter(sameCurrency)
+  const expenses = load<any[]>('expenses', []).filter(sameCurrency)
+  const transactions = load<any[]>('transactions', []).filter(sameCurrency)
+
+  const paidSales = invoices.reduce((sum, inv) => sum + n(inv.paidAmount ?? inv.paid), 0)
+  const expenseOut = expenses.reduce((sum, item) => sum + n(item.amountBase ?? item.amount ?? item.total), 0)
+
+  const txDelta = transactions.reduce((sum, tx) => {
+    const type = String(tx.transactionType || tx.type || '').toLowerCase()
+    const amount = n(tx.amount)
+    return sum + (type === 'withdraw' || type === 'expense' ? -amount : amount)
+  }, 0)
+
+  // Sales already contribute through invoice paid amounts, so ignore billing deposits
+  // from transactions to avoid double-counting them in this small form preview.
+  const billingDepositDuplicate = transactions
+    .filter((tx) => String(tx.referenceSource || '') === 'billing-payment')
+    .reduce((sum, tx) => sum + n(tx.amount), 0)
+
+  // Expenses are already counted above. Salary/Godown/medicine wallet withdrawals are
+  // transaction-only here, so they remain part of txDelta.
+  const expenseTransactionDuplicates = transactions
+    .filter((tx) => {
+      const source = String(tx.source || '')
+      const module = String(tx.module || '')
+      return source === 'expenses' || module === 'expenses'
+    })
+    .reduce((sum, tx) => sum + n(tx.amount), 0)
+
+  return round(paidSales - expenseOut + txDelta - billingDepositDuplicate + expenseTransactionDuplicates)
+}
+
 function FilterSelect({ value, onChange, options, ariaLabel, className = '' }: { value: string; onChange: (value: string) => void; options: { value: string; label: string }[]; ariaLabel: string; className?: string }) {
   const [open, setOpen] = useState(false)
   const selected = options.find((option) => option.value === value) ?? options[0]
@@ -365,6 +427,8 @@ export default function Medicines({ language, globalSearch = '' }: { language: L
   const [formError, setFormError] = useState('')
   const [formCodeMode, setFormCodeMode] = useState<'barcode' | 'qr'>('barcode')
   const [formCodePreviewOpen, setFormCodePreviewOpen] = useState(false)
+  const [cashPayEnabled, setCashPayEnabled] = useState(false)
+  const [cashPayAmount, setCashPayAmount] = useState('0')
 
   useEffect(() => {
     setSearch(globalSearch)
@@ -388,11 +452,14 @@ export default function Medicines({ language, globalSearch = '' }: { language: L
   }), [categoryFilter, dateFrom, dateTo, products, search, stockFilter, suppliers, timeFilter])
 
   const openAdd = () => {
-    setEditingId(null); setDraft(emptyDraft()); setMargin(''); setFormError(''); setFormCodeMode('barcode'); setFormCodePreviewOpen(false); setFormOpen(true)
+    setEditingId(null); setDraft(emptyDraft()); setMargin(''); setFormError(''); setFormCodeMode('barcode'); setFormCodePreviewOpen(false); setCashPayEnabled(false); setCashPayAmount('0'); setFormOpen(true)
   }
   const openEdit = (product: Product) => {
     const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...rest } = product
-    setEditingId(product.id); setDraft(rest); setMargin(''); setFormError(''); setFormCodeMode('barcode'); setFormCodePreviewOpen(false); setFormOpen(true); setMenu(null)
+    const ref = `product-purchase-${product.id}`
+    const existingWalletTx = load<any[]>('transactions', []).find((tx) => tx.source === 'product-registration-wallet' && tx.referenceId === ref)
+    const existingPaid = Math.max(0, n(existingWalletTx?.amount))
+    setEditingId(product.id); setDraft(rest); setMargin(''); setFormError(''); setFormCodeMode('barcode'); setFormCodePreviewOpen(false); setCashPayEnabled(existingPaid > 0); setCashPayAmount(String(existingPaid || 0)); setFormOpen(true); setMenu(null)
   }
 
   const addCategory = () => {
@@ -434,8 +501,13 @@ export default function Medicines({ language, globalSearch = '' }: { language: L
       packHierarchy: { stripsPerBox: Math.max(1, n(draft.packHierarchy.stripsPerBox) || 10), tabletsPerStrip: Math.max(1, n(draft.packHierarchy.tabletsPerStrip) || 3), stripSelling: Math.max(0, n(draft.packHierarchy.stripSelling)), tabletSelling: Math.max(0, n(draft.packHierarchy.tabletSelling)), boxLabel: draft.packHierarchy.boxLabel.trim() || 'Box', stripLabel: draft.packHierarchy.stripLabel.trim() || 'Strip', unitLabel: draft.packHierarchy.unitLabel.trim() || 'Tablet' },
       createdAt: existing?.createdAt || now, updatedAt: now,
     }
+    const purchaseTotal = round(product.quantity * product.purchase)
+    const requestedCashPayment = cashPayEnabled ? round(Math.max(0, n(cashPayAmount))) : 0
+    const wc = walletCopy[language] ?? walletCopy.English
+    if (requestedCashPayment > purchaseTotal) { setFormError(wc.overTotal); return }
+
     let nextProducts = editingId ? products.map((p) => p.id === editingId ? product : p) : [product, ...products]
-    saveProductLinkedRecords(product, existing)
+    saveProductLinkedRecords(product, existing, requestedCashPayment)
     const entries = load<GodownEntry[]>('godownEntries', [])
     if (product.quantity > 0) {
       const weighted = calculateWeightedAverageCost(product.id, entries, product.purchase)
@@ -444,7 +516,7 @@ export default function Medicines({ language, globalSearch = '' }: { language: L
     setProducts(nextProducts); save('products', nextProducts); notifyDataChanged(); setFormOpen(false); toast.success(editingId ? t.edit : t.add, product.name)
   }
 
-  const saveProductLinkedRecords = (product: Product, _previous?: Product) => {
+  const saveProductLinkedRecords = (product: Product, _previous?: Product, cashPaid = 0) => {
     const now = new Date().toISOString(); const date = now.slice(0, 10); const ref = `product-purchase-${product.id}`
     const supplier = suppliers.find((s) => String(s.id) === String(product.supplierId))
     const total = round(product.quantity * product.purchase)
@@ -452,7 +524,7 @@ export default function Medicines({ language, globalSearch = '' }: { language: L
     if (product.quantity > 0) {
       const entry: GodownEntry = {
         id: `godown-${product.id}`, type: 'import', movementType: 'Purchase', date, currency: product.currency, supplierId: product.supplierId,
-        supplierName: supplierName(supplier), total, paid: 0, remaining: total, source: 'product-registration', referenceId: ref,
+        supplierName: supplierName(supplier), total, paid: Math.min(cashPaid, total), remaining: Math.max(0, total - Math.min(cashPaid, total)), source: 'product-registration', referenceId: ref,
         rows: [{ id: `godown-row-${product.id}`, productId: product.id, name: product.name, code: product.code, category: product.category, quantity: product.quantity, unit: product.unit, purchase: product.purchase, selling: product.selling, currency: product.currency, supplierId: product.supplierId }],
         createdAt: now, updatedAt: now,
       }
@@ -465,10 +537,39 @@ export default function Medicines({ language, globalSearch = '' }: { language: L
       purchases = [{
         id: ref, supplierId: supplier.id, supplierName: supplierName(supplier), referenceNumber: product.code, invoiceNumber: product.code, purchaseDate: date, date,
         productId: product.id, deviceName: product.name, category: product.category, quantity: product.quantity, unit: product.unit, unitPrice: product.purchase, currency: product.currency,
-        totalPurchaseValue: total, paidAmount: 0, remainAmount: total, status: total <= 0 ? 'Paid' : 'Unpaid', notes: product.notes || 'Medicine registration purchase', source: 'product-registration', createdAt: now, updatedAt: now,
+        totalPurchaseValue: total, paidAmount: Math.min(cashPaid, total), remainAmount: Math.max(0, total - Math.min(cashPaid, total)), status: total <= 0 || cashPaid >= total ? 'Paid' : cashPaid > 0 ? 'Partial' : 'Unpaid', notes: product.notes || 'Medicine registration purchase', source: 'product-registration', createdAt: now, updatedAt: now,
       }, ...purchases]
     }
     save('supplierPurchases', purchases)
+
+    let transactions = load<any[]>('transactions', []).filter(
+      (tx) => !(tx.source === 'product-registration-wallet' && tx.referenceId === ref)
+    )
+    const paid = Math.min(Math.max(0, cashPaid), total)
+    if (paid > 0) {
+      transactions = [{
+        id: `medicine-wallet-${product.id}`,
+        type: 'expense',
+        transactionType: 'withdraw',
+        category: 'Cash Wallet',
+        title: `Medicine purchase — ${product.name}`,
+        description: product.notes || `Cash payment for ${product.name}`,
+        amount: paid,
+        currency: product.currency,
+        date,
+        createdAt: now,
+        updatedAt: now,
+        source: 'product-registration-wallet',
+        referenceSource: 'product-registration',
+        referenceId: ref,
+        productId: product.id,
+        supplierId: product.supplierId,
+      }, ...transactions]
+    }
+    save('transactions', transactions)
+    window.dispatchEvent(new CustomEvent('cash-wallet-updated', {
+      detail: { referenceId: ref, amount: paid, currency: product.currency }
+    }))
   }
 
   const requestRemove = (product: Product) => {
@@ -489,6 +590,8 @@ export default function Medicines({ language, globalSearch = '' }: { language: L
     })
     save('godownEntries', godownEntries.filter((e) => e.referenceId !== ref))
     save('supplierPurchases', supplierPurchases.filter((p) => p.id !== ref))
+    const transactions = load<any[]>('transactions', [])
+    save('transactions', transactions.filter((tx) => !(tx.source === 'product-registration-wallet' && tx.referenceId === ref)))
     setDeleteProduct(null)
     notifyDataChanged()
     toast.warning(t.delete, product.name)
@@ -570,7 +673,7 @@ export default function Medicines({ language, globalSearch = '' }: { language: L
         )}
       </section>
 
-      {formOpen && <MedicineModal language={language} t={t} draft={draft} setDraft={setDraft} editing={!!editingId} onClose={()=>setFormOpen(false)} onSubmit={submit} margin={margin} setMargin={setMargin} applyMargin={applyMargin} categories={categories} units={units} suppliers={suppliers} showCategoryAdd={showCategoryAdd} setShowCategoryAdd={setShowCategoryAdd} categoryNew={categoryNew} setCategoryNew={setCategoryNew} addCategory={addCategory} showUnitAdd={showUnitAdd} setShowUnitAdd={setShowUnitAdd} unitNew={unitNew} setUnitNew={setUnitNew} addUnit={addUnit} generateCode={generateCode} onAddSupplier={()=>{setSupplierDraft((s)=>({...s,currency:draft.currency}));setSupplierOpen(true)}} error={formError} formCodeMode={formCodeMode} setFormCodeMode={setFormCodeMode} onCodePreview={()=>{ if(!draft.barcode.trim()) setDraft((d:Draft)=>({...d,barcode:generateBarcodeValue()})); setFormCodePreviewOpen(true) }}/>} 
+      {formOpen && <MedicineModal language={language} t={t} draft={draft} setDraft={setDraft} editing={!!editingId} onClose={()=>setFormOpen(false)} onSubmit={submit} margin={margin} setMargin={setMargin} applyMargin={applyMargin} categories={categories} units={units} suppliers={suppliers} showCategoryAdd={showCategoryAdd} setShowCategoryAdd={setShowCategoryAdd} categoryNew={categoryNew} setCategoryNew={setCategoryNew} addCategory={addCategory} showUnitAdd={showUnitAdd} setShowUnitAdd={setShowUnitAdd} unitNew={unitNew} setUnitNew={setUnitNew} addUnit={addUnit} generateCode={generateCode} onAddSupplier={()=>{setSupplierDraft((s)=>({...s,currency:draft.currency}));setSupplierOpen(true)}} error={formError} formCodeMode={formCodeMode} setFormCodeMode={setFormCodeMode} onCodePreview={()=>{ if(!draft.barcode.trim()) setDraft((d:Draft)=>({...d,barcode:generateBarcodeValue()})); setFormCodePreviewOpen(true) }} cashPayEnabled={cashPayEnabled} setCashPayEnabled={setCashPayEnabled} cashPayAmount={cashPayAmount} setCashPayAmount={setCashPayAmount} walletBalance={cashWalletBalance(draft.currency)}/>} 
       {formOpen && formCodePreviewOpen && <DraftCodeModal name={draft.name || t.name} value={draft.barcode || draft.code || draft.name || generateBarcodeValue()} mode={formCodeMode} t={t} onClose={()=>setFormCodePreviewOpen(false)} template={barcodeTemplate} setTemplate={setBarcodeTemplate} copies={barcodeCopies} setCopies={setBarcodeCopies} customWidth={customWidth} setCustomWidth={setCustomWidth} customHeight={customHeight} setCustomHeight={setCustomHeight}/>} 
       {supplierOpen && <SupplierModal t={t} draft={supplierDraft} setDraft={setSupplierDraft} onClose={()=>setSupplierOpen(false)} onSubmit={createSupplier} onItemKey={supplierItemKey} addItem={addSupplierItem}/>} 
       {viewProduct && <ViewModal language={language} product={viewProduct} supplier={suppliers.find((s)=>s.id===viewProduct.supplierId)} t={t} onClose={()=>setViewProduct(null)}/>} 
@@ -653,7 +756,7 @@ function MenuButton({ icon: Icon, label, onClick, danger=false }: any) {
 function Field({ label, children, full=false }: { label: string; children: React.ReactNode; full?: boolean }) { return <label className={full?'md:col-span-2':''}><span className="mb-1.5 block text-xs font-semibold">{label}</span>{children}</label> }
 
 function MedicineModal(props: any) {
-  const { language,t,draft,setDraft,editing,onClose,onSubmit,margin,setMargin,applyMargin,categories,units,suppliers,showCategoryAdd,setShowCategoryAdd,categoryNew,setCategoryNew,addCategory,showUnitAdd,setShowUnitAdd,unitNew,setUnitNew,addUnit,generateCode,onAddSupplier,error,formCodeMode,setFormCodeMode,onCodePreview } = props
+  const { language,t,draft,setDraft,editing,onClose,onSubmit,margin,setMargin,applyMargin,categories,units,suppliers,showCategoryAdd,setShowCategoryAdd,categoryNew,setCategoryNew,addCategory,showUnitAdd,setShowUnitAdd,unitNew,setUnitNew,addUnit,generateCode,onAddSupplier,error,formCodeMode,setFormCodeMode,onCodePreview,cashPayEnabled,setCashPayEnabled,cashPayAmount,setCashPayAmount,walletBalance } = props
   const profit = round(n(draft.selling) - n(draft.purchase))
   const profitPct = n(draft.purchase) > 0 ? round((profit / n(draft.purchase)) * 100) : 0
   const stripsPerBox = Math.max(1, n(draft.packHierarchy.stripsPerBox) || 1)
@@ -665,6 +768,8 @@ function MedicineModal(props: any) {
   const boxSell = n(draft.selling)
   const stripSell = round(boxSell / stripsPerBox)
   const unitSell = round(boxSell / unitsPerBox)
+  const wc = walletCopy[language] ?? walletCopy.English
+  const purchaseTotal = round(Math.max(0, n(draft.quantity)) * Math.max(0, n(draft.purchase)))
   const changeHierarchy = (patch: Partial<Draft['packHierarchy']>) => setDraft((d:Draft)=>({...d, packHierarchy:{...d.packHierarchy,...patch}}))
   const hierarchyToggleText = language === 'English'
     ? {
@@ -820,6 +925,66 @@ function MedicineModal(props: any) {
 
         <Field label={t.prescription} full><button type="button" onClick={()=>setDraft((d:Draft)=>({...d,prescriptionRequired:!d.prescriptionRequired}))} className="flex w-full items-center gap-3 rounded-xl border border-slate-200 p-3 text-start dark:border-[#24365f]">{draft.prescriptionRequired?<span className="grid h-5 w-5 place-items-center rounded border border-[#172a57] bg-[#172a57] text-white"><Check size={14}/></span>:<span className="h-5 w-5 rounded border border-slate-400"/>}<span><b className="text-sm">{t.prescription}</b><span className="mt-0.5 block text-[10px] text-slate-400">{t.prescriptionHint}</span></span></button></Field>
         <Field label={t.supplier} full><div className="rounded-xl border border-slate-200 p-3 dark:border-[#24365f]"><div className="mb-2 text-[10px] text-slate-400">{t.supplierHint}</div><div className="flex gap-2"><select value={draft.supplierId} onChange={(e)=>setDraft((d:Draft)=>({...d,supplierId:e.target.value}))} className="form-control"><option value="">{t.selectSupplier}</option>{suppliers.map((s:Supplier)=><option key={s.id} value={s.id}>{supplierName(s)}</option>)}</select><button type="button" onClick={onAddSupplier} className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 dark:border-[#24365f]"><Plus size={16}/></button></div></div></Field>
+
+        <div className="md:col-span-2 rounded-xl border border-slate-200 p-3 dark:border-[#24365f]">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={()=>{
+                const next=!cashPayEnabled
+                setCashPayEnabled(next)
+                if(next && n(cashPayAmount) <= 0) setCashPayAmount(String(purchaseTotal || 0))
+                if(!next) setCashPayAmount('0')
+              }}
+              className="inline-flex min-w-0 items-center gap-2 text-start"
+            >
+              <span className={`grid h-5 w-5 shrink-0 place-items-center rounded border ${
+                cashPayEnabled
+                  ? 'border-[#172a57] bg-[#172a57] text-white dark:border-amber-500 dark:bg-amber-500 dark:text-slate-950'
+                  : 'border-slate-400'
+              }`}>
+                {cashPayEnabled&&<Check size={14}/>}
+              </span>
+              <WalletCards size={17} className="shrink-0 text-[#172a57] dark:text-amber-400"/>
+              <span className="text-sm font-bold">{wc.pay}</span>
+            </button>
+            <div className={`text-[11px] ${n(walletBalance)<0?'font-bold text-red-500':'text-slate-500 dark:text-slate-300'}`}>
+              {wc.balance}: <b>{money(n(walletBalance),draft.currency)}</b>
+            </div>
+          </div>
+
+          {cashPayEnabled && (
+            <div className="mt-3">
+              <label className="mb-1.5 block text-xs font-semibold">{wc.amount}</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  max={purchaseTotal}
+                  value={cashPayAmount}
+                  onChange={(e)=>{
+                    const raw=e.target.value
+                    if(raw===''){setCashPayAmount('');return}
+                    setCashPayAmount(String(Math.min(Math.max(0,n(raw)),purchaseTotal)))
+                  }}
+                  className="form-control"
+                />
+                <span className="shrink-0 text-xs text-slate-500 dark:text-slate-300">
+                  {wc.of} {money(purchaseTotal,draft.currency)}
+                </span>
+              </div>
+              <div className="mt-2 text-[10px] font-medium text-amber-600 dark:text-amber-400">{wc.canGoNegative}</div>
+              <div className="mt-1 text-[10px] text-slate-400">
+                {language==='English'
+                  ? `This payment will be deducted from the ${draft.currency} wallet only.`
+                  : language==='دری'
+                    ? `این مبلغ فقط از موجودی ${draft.currency} کسر می‌شود.`
+                    : `دا مبلغ یوازې د ${draft.currency} له موجودۍ څخه کمیږي.`}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
       <button className="mt-5 h-10 w-full rounded-lg bg-[#172a57] text-sm font-bold text-white dark:bg-amber-500 dark:text-slate-950">{editing?t.update:t.save}</button>
     </form>

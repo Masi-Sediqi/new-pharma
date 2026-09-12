@@ -1175,17 +1175,11 @@ const statCards = [
   {
     group: "Financial overview",
     label: t.currentCashWallet || "Current cash wallet",
-    value:
-      displayCurrency === "original" ||
-      displayCurrency === "all" ||
-      metrics.cashWalletMissingCurrencies?.length
-        ? compactCurrencyTotals(metrics.cashWalletByCurrency, baseCurrency)
-        : compactWalletMoney(metrics.cashWalletConvertedTotal, displayCurrency),
-    subValue: compactCurrencyTotals(metrics.cashWalletByCurrency, baseCurrency),
-    hideSubValue:
-      displayCurrency === "original" ||
-      displayCurrency === "all" ||
-      metrics.cashWalletMissingCurrencies?.length,
+    // Cash Wallet is intentionally shown by its original currencies.
+    // Never merge AFN, USD, EUR, ... into one converted number here.
+    value: compactCurrencyTotals(metrics.cashWalletByCurrency, baseCurrency),
+    subValue: "",
+    hideSubValue: true,
     icon: WalletCards,
     tone: "green",
     key: "cash-wallet",

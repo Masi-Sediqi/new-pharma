@@ -5,7 +5,7 @@ import { CalendarDays, Check, ChevronDown, CreditCard, DollarSign, Eye, History,
 import type { Language } from '../i18n'
 
 type AnyRow = Record<string, any>
-type Props = { language: Language; onEditInvoice?: (invoiceId:string)=>void }
+type Props = { language: Language; globalSearch?: string; onEditInvoice?: (invoiceId:string)=>void }
 
 const n=(v:unknown)=>Number.parseFloat(String(v??0))||0
 const round=(v:number)=>Math.round((v+Number.EPSILON)*100)/100
@@ -46,8 +46,9 @@ function FilterSelect({value,onChange,options,ariaLabel}:{value:string;onChange:
 
 function Stat({icon:Icon,label,value,tone}:{icon:any;label:string;value:string;tone:'blue'|'green'|'orange'|'red'}){const cls={blue:'border-l-sky-500 dark:border-l-cyan-400',green:'border-l-emerald-500',orange:'border-l-amber-500',red:'border-l-red-500'}[tone];return <div className={`app-panel flex min-h-[92px] items-center justify-between rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-[#24365f] dark:bg-[#111a2c] ${cls} border-l-[3px]`}><div><div className="text-xs text-slate-500 dark:text-slate-300">{label}</div><div className="mt-1 whitespace-pre-line text-xl font-extrabold">{value}</div></div><div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100 text-slate-800 dark:bg-white/10 dark:text-white"><Icon size={19}/></div></div>}
 
-export default function Sales({language,onEditInvoice}:Props){
- const t=text[language]; const [version,setVersion]=useState(0); const [search,setSearch]=useState(''); const [status,setStatus]=useState('all'); const [period,setPeriod]=useState('all'); const [view,setView]=useState<AnyRow|null>(null); const [history,setHistory]=useState<AnyRow|null>(null); const [payment,setPayment]=useState<AnyRow|null>(null); const [refund,setRefund]=useState<AnyRow|null>(null); const [del,setDel]=useState<AnyRow|null>(null); const [menu,setMenu]=useState<{id:string;top:number;left:number}|null>(null)
+export default function Sales({language,globalSearch='',onEditInvoice}:Props){
+ const t=text[language]; const [version,setVersion]=useState(0); const [search,setSearch]=useState(globalSearch); const [status,setStatus]=useState('all'); const [period,setPeriod]=useState('all'); const [view,setView]=useState<AnyRow|null>(null); const [history,setHistory]=useState<AnyRow|null>(null); const [payment,setPayment]=useState<AnyRow|null>(null); const [refund,setRefund]=useState<AnyRow|null>(null); const [del,setDel]=useState<AnyRow|null>(null); const [menu,setMenu]=useState<{id:string;top:number;left:number}|null>(null)
+ useEffect(()=>setSearch(globalSearch),[globalSearch])
  useEffect(()=>{const f=()=>setVersion(v=>v+1);window.addEventListener('pharma:data-changed',f);return()=>window.removeEventListener('pharma:data-changed',f)},[])
  const sales=useMemo(()=>load<AnyRow[]>('billingInvoices',[]),[version]); const products=useMemo(()=>load<AnyRow[]>('products',[]),[version]);
  const visible=useMemo(()=>sales.filter(s=>{const q=search.trim().toLowerCase();const hay=[invoiceNo(s),s.customerName,s.customerPhone,s.paymentMethod,s.paymentStatus,...items(s).flatMap(i=>[i.name,i.code,i.barcode]),saleTotal(s),iso(s)].join(' ').toLowerCase();const bal=saleBalance(s),ref=n(s.refundTotal);const stat=status==='all'||(status==='paid'&&bal<=0&&ref<=0)||(status==='pending'&&bal>0)||(status==='refunded'&&ref>0);let date=true;const d=iso(s);if(period!=='all'&&d){const x=new Date(`${d}T12:00:00`),now=new Date();if(period==='today')date=d===now.toISOString().slice(0,10);if(period==='week'){const z=new Date();z.setDate(z.getDate()-7);date=x>=z}if(period==='month')date=x.getMonth()===now.getMonth()&&x.getFullYear()===now.getFullYear();if(period==='year')date=x.getFullYear()===now.getFullYear()}return(!q||hay.includes(q))&&stat&&date}),[sales,search,status,period])
