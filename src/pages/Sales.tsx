@@ -27,9 +27,9 @@ const fmtDate=(d:string)=>{if(!d)return'-';try{return new Date(`${d}T12:00:00`).
 const shamsi=(d:string)=>{if(!d)return'-';try{return new Intl.DateTimeFormat('en-CA-u-ca-persian',{year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(`${d}T12:00:00`))}catch{return d}}
 
 const text={
- English:{title:'Sales Management',sub:'Track and manage all sales transactions',print:'Print Report',total:'Total Sales',paid:'Total Paid',pending:'Total Pending',discount:'Total Discounts',refunds:'Refunds',search:'Search customer / phone / product / barcode / amount / date / invoice...',all:'All statuses',allTime:'All time',today:'Today',week:'Weekly',month:'Monthly',year:'Yearly',custom:'Custom',paidStatus:'Paid',loan:'Pending',partial:'Partial',refunded:'Refunded',sales:'Sales',invoice:'Invoice',customer:'Customer',items:'Items',totalCol:'Total',paidCol:'Paid',status:'Status',date:'Date',actions:'Actions',none:'No sales invoice has been recorded yet.',view:'View Details',printInv:'Print Invoice',receipt:'Print Receipt',edit:'Edit Invoice',history:'Payment History',addPayment:'Add Payment',markPaid:'Mark as Paid',refund:'Refund',delete:'Delete',close:'Close',subtotal:'Subtotal',balance:'Remaining',add:'Add Payment',amount:'Amount',note:'Note',wallet:'Add to Cash Wallet',save:'Save',cancel:'Cancel',refundReason:'Reason for Refund',refundMode:'Refund mode',byQty:'By quantity',byPercent:'By percent',byAmount:'By amount',confirmRefund:'Confirm Refund',deleteTitle:'Delete Invoice',deleteMsg:'Move this invoice to Recycle Bin? Stock and financial effects will be reversed.',confirm:'Confirm',paymentEntries:'Payment entries',noHistory:'No payment history yet.'},
- دری:{title:'مدیریت فروش',sub:'پیگیری و مدیریت تمام تراکنش‌های فروش',print:'چاپ گزارش',total:'مجموع فروش',paid:'مجموع پرداخت شده',pending:'مجموع معلق',discount:'مجموع تخفیفات',refunds:'برگشتی‌ها',search:'جستجو با فاکتور یا مشتری، تلفون، محصول، بارکد، مبلغ، تاریخ...',all:'همه وضعیت‌ها',allTime:'همه وقت',today:'امروز',week:'هفتگی',month:'ماهانه',year:'سالانه',custom:'سفارشی',paidStatus:'پرداخت شده',loan:'معلق',partial:'قسمتی',refunded:'بازپرداخت شده',sales:'فروش',invoice:'فاکتور',customer:'مشتری',items:'اقلام',totalCol:'مجموع',paidCol:'پرداخت شده',status:'وضعیت',date:'تاریخ',actions:'عملیات',none:'هنوز هیچ فروش ثبت نشده است.',view:'مشاهده جزئیات',printInv:'چاپ فاکتور',receipt:'چاپ رسید',edit:'ویرایش فاکتور',history:'تاریخچه پرداخت',addPayment:'افزودن پرداخت',markPaid:'پرداخت کامل',refund:'بازپرداخت',delete:'حذف',close:'بستن',subtotal:'جمع فرعی',balance:'باقی‌مانده',add:'افزودن پرداخت',amount:'مبلغ',note:'یادداشت',wallet:'اضافه به کیف پول نقدی',save:'ذخیره',cancel:'لغو',refundReason:'دلیل بازپرداخت',refundMode:'روش بازپرداخت',byQty:'بر اساس مقدار',byPercent:'بر اساس فیصدی',byAmount:'بر اساس مبلغ',confirmRefund:'تأیید بازپرداخت',deleteTitle:'حذف فاکتور',deleteMsg:'این فاکتور به سطل بازیافت انتقال شود؟ اثر موجودی و مالی آن برگردانده می‌شود.',confirm:'تأیید',paymentEntries:'ورودی‌های پرداخت',noHistory:'هنوز سابقه پرداخت ثبت نشده است.'},
- پښتو:{title:'د پلور مدیریت',sub:'د پلور ټولې معاملې تعقیب او اداره کړئ',print:'راپور چاپ',total:'ټول پلور',paid:'ټول ورکړل شوي',pending:'ټول پاتې',discount:'ټول تخفیفونه',refunds:'بېرته ورکړې',search:'د بل، پېرودونکي، تلیفون، توکي، بارکوډ، مبلغ یا نېټې لټون...',all:'ټول حالتونه',allTime:'ټول وخت',today:'نن',week:'اوونیز',month:'میاشتنی',year:'کلنی',custom:'ځانګړی',paidStatus:'ورکړل شوی',loan:'پاتې',partial:'جزوي',refunded:'بېرته ورکړل شوی',sales:'پلور',invoice:'بل',customer:'پېرودونکی',items:'توکي',totalCol:'ټول',paidCol:'ورکړل شوي',status:'حالت',date:'نېټه',actions:'عملیات',none:'تر اوسه پلور نه دی ثبت شوی.',view:'جزئیات',printInv:'بل چاپ',receipt:'رسید چاپ',edit:'بل سمول',history:'د تادیې تاریخ',addPayment:'تادیه اضافه کړئ',markPaid:'بشپړ ورکړل شوی',refund:'بېرته ورکول',delete:'ړنګول',close:'بندول',subtotal:'فرعي مجموعه',balance:'پاتې',add:'تادیه اضافه کړئ',amount:'مبلغ',note:'یادښت',wallet:'نغدي بټوې ته اضافه کړئ',save:'خوندي',cancel:'لغوه',refundReason:'د بېرته ورکولو دلیل',refundMode:'د بېرته ورکولو طریقه',byQty:'د مقدار له مخې',byPercent:'د سلنې له مخې',byAmount:'د مبلغ له مخې',confirmRefund:'بېرته ورکول تایید کړئ',deleteTitle:'بل ړنګول',deleteMsg:'دا بل ریسایکل بن ته ولېږدول شي؟ د موجودۍ او مالي اغېزې به بېرته وګرځول شي.',confirm:'تایید',paymentEntries:'د تادیې ثبتونه',noHistory:'د تادیې تاریخ نشته.'}
+ English:{title:'Sales Management',sub:'Track and manage all sales transactions',print:'Print Report',total:'Total Sales',paid:'Total Paid',pending:'Total Pending',discount:'Total Discounts',refunds:'Total Refunds',search:'Search customer / phone / product / barcode / amount / date / invoice...',all:'All statuses',allTime:'All time',today:'Today',week:'Weekly',month:'Monthly',year:'Yearly',custom:'Custom',paidStatus:'Paid',loan:'Pending',partial:'Partial',refunded:'Refunded',sales:'Sales',invoice:'Invoice',customer:'Customer',items:'Items',totalCol:'Total',paidCol:'Paid',status:'Status',date:'Date',actions:'Actions',none:'No sales invoice has been recorded yet.',view:'View Details',printInv:'Print Invoice',receipt:'Print Receipt',edit:'Edit Invoice',history:'Payment History',addPayment:'Add Payment',markPaid:'Mark as Paid',refund:'Refund',undoRefund:'Undo Refund',undoTitle:'Undo Refund',undoMsg:'Reverse this refund? Stock will be re-deducted and the sale restored.',delete:'Delete',close:'Close',subtotal:'Subtotal',balance:'Remaining',add:'Add Payment',amount:'Amount',note:'Note',wallet:'Add to Cash Wallet',save:'Save',cancel:'Cancel',refundReason:'Reason for Refund',refundMode:'Refund mode',byQty:'By quantity',byPercent:'By percent',byAmount:'By amount',confirmRefund:'Confirm Refund',deleteTitle:'Delete Invoice',deleteMsg:'Move this invoice to Recycle Bin? Stock and financial effects will be reversed.',confirm:'Confirm',paymentEntries:'Payment entries',noHistory:'No payment history yet.'},
+ دری:{title:'مدیریت فروش',sub:'پیگیری و مدیریت تمام تراکنش‌های فروش',print:'چاپ گزارش',total:'مجموع فروش',paid:'مجموع پرداخت شده',pending:'مجموع معلق',discount:'مجموع تخفیفات',refunds:'مجموع برگشتی‌ها',search:'جستجو با فاکتور یا مشتری، تلفون، محصول، بارکد، مبلغ، تاریخ...',all:'همه وضعیت‌ها',allTime:'همه وقت',today:'امروز',week:'هفتگی',month:'ماهانه',year:'سالانه',custom:'سفارشی',paidStatus:'پرداخت شده',loan:'معلق',partial:'قسمتی',refunded:'بازپرداخت شده',sales:'فروش',invoice:'فاکتور',customer:'مشتری',items:'اقلام',totalCol:'مجموع',paidCol:'پرداخت شده',status:'وضعیت',date:'تاریخ',actions:'عملیات',none:'هنوز هیچ فروش ثبت نشده است.',view:'مشاهده جزئیات',printInv:'چاپ فاکتور',receipt:'چاپ رسید',edit:'ویرایش فاکتور',history:'تاریخچه پرداخت',addPayment:'افزودن پرداخت',markPaid:'پرداخت کامل',refund:'بازپرداخت',undoRefund:'لغو بازپرداخت',undoTitle:'لغو بازپرداخت',undoMsg:'این بازپرداخت لغو شود؟ موجودی دوباره کسر و فروش بازگردانده می‌شود.',delete:'حذف',close:'بستن',subtotal:'جمع فرعی',balance:'باقی‌مانده',add:'افزودن پرداخت',amount:'مبلغ',note:'یادداشت',wallet:'اضافه به کیف پول نقدی',save:'ذخیره',cancel:'لغو',refundReason:'دلیل بازپرداخت',refundMode:'روش بازپرداخت',byQty:'بر اساس مقدار',byPercent:'بر اساس فیصدی',byAmount:'بر اساس مبلغ',confirmRefund:'تأیید بازپرداخت',deleteTitle:'حذف فاکتور',deleteMsg:'این فاکتور به سطل بازیافت انتقال شود؟ اثر موجودی و مالی آن برگردانده می‌شود.',confirm:'تأیید',paymentEntries:'ورودی‌های پرداخت',noHistory:'هنوز سابقه پرداخت ثبت نشده است.'},
+ پښتو:{title:'د پلور مدیریت',sub:'د پلور ټولې معاملې تعقیب او اداره کړئ',print:'راپور چاپ',total:'ټول پلور',paid:'ټول ورکړل شوي',pending:'ټول پاتې',discount:'ټول تخفیفونه',refunds:'ټولې بېرته ورکړې',search:'د بل، پېرودونکي، تلیفون، توکي، بارکوډ، مبلغ یا نېټې لټون...',all:'ټول حالتونه',allTime:'ټول وخت',today:'نن',week:'اوونیز',month:'میاشتنی',year:'کلنی',custom:'ځانګړی',paidStatus:'ورکړل شوی',loan:'پاتې',partial:'جزوي',refunded:'بېرته ورکړل شوی',sales:'پلور',invoice:'بل',customer:'پېرودونکی',items:'توکي',totalCol:'ټول',paidCol:'ورکړل شوي',status:'حالت',date:'نېټه',actions:'عملیات',none:'تر اوسه پلور نه دی ثبت شوی.',view:'جزئیات',printInv:'بل چاپ',receipt:'رسید چاپ',edit:'بل سمول',history:'د تادیې تاریخ',addPayment:'تادیه اضافه کړئ',markPaid:'بشپړ ورکړل شوی',refund:'بېرته ورکول',undoRefund:'بېرته ورکړه لغوه کړئ',undoTitle:'بېرته ورکړه لغوه کړئ',undoMsg:'دا بېرته ورکړه لغوه شي؟ ذخیره به بیا کمه او پلور به بېرته فعال شي.',delete:'ړنګول',close:'بندول',subtotal:'فرعي مجموعه',balance:'پاتې',add:'تادیه اضافه کړئ',amount:'مبلغ',note:'یادښت',wallet:'نغدي بټوې ته اضافه کړئ',save:'خوندي',cancel:'لغوه',refundReason:'د بېرته ورکولو دلیل',refundMode:'د بېرته ورکولو طریقه',byQty:'د مقدار له مخې',byPercent:'د سلنې له مخې',byAmount:'د مبلغ له مخې',confirmRefund:'بېرته ورکول تایید کړئ',deleteTitle:'بل ړنګول',deleteMsg:'دا بل ریسایکل بن ته ولېږدول شي؟ د موجودۍ او مالي اغېزې به بېرته وګرځول شي.',confirm:'تایید',paymentEntries:'د تادیې ثبتونه',noHistory:'د تادیې تاریخ نشته.'}
 } as const
 
 
@@ -47,7 +47,7 @@ function FilterSelect({value,onChange,options,ariaLabel}:{value:string;onChange:
 function Stat({icon:Icon,label,value,tone}:{icon:any;label:string;value:string;tone:'blue'|'green'|'orange'|'red'}){const cls={blue:'border-l-sky-500 dark:border-l-cyan-400',green:'border-l-emerald-500',orange:'border-l-amber-500',red:'border-l-red-500'}[tone];return <div className={`app-panel flex min-h-[92px] items-center justify-between rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-[#24365f] dark:bg-[#111a2c] ${cls} border-l-[3px]`}><div><div className="text-xs text-slate-500 dark:text-slate-300">{label}</div><div className="mt-1 whitespace-pre-line text-xl font-extrabold">{value}</div></div><div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100 text-slate-800 dark:bg-white/10 dark:text-white"><Icon size={19}/></div></div>}
 
 export default function Sales({language,globalSearch='',onEditInvoice}:Props){
- const t=text[language]; const [version,setVersion]=useState(0); const [search,setSearch]=useState(globalSearch); const [status,setStatus]=useState('all'); const [period,setPeriod]=useState('all'); const [view,setView]=useState<AnyRow|null>(null); const [history,setHistory]=useState<AnyRow|null>(null); const [payment,setPayment]=useState<AnyRow|null>(null); const [refund,setRefund]=useState<AnyRow|null>(null); const [del,setDel]=useState<AnyRow|null>(null); const [menu,setMenu]=useState<{id:string;top:number;left:number}|null>(null)
+ const t=text[language]; const [version,setVersion]=useState(0); const [search,setSearch]=useState(globalSearch); const [status,setStatus]=useState('all'); const [period,setPeriod]=useState('all'); const [view,setView]=useState<AnyRow|null>(null); const [history,setHistory]=useState<AnyRow|null>(null); const [payment,setPayment]=useState<AnyRow|null>(null); const [refund,setRefund]=useState<AnyRow|null>(null); const [undoRefund,setUndoRefund]=useState<AnyRow|null>(null); const [del,setDel]=useState<AnyRow|null>(null); const [menu,setMenu]=useState<{id:string;top:number;left:number}|null>(null)
  useEffect(()=>setSearch(globalSearch),[globalSearch])
  useEffect(()=>{const f=()=>setVersion(v=>v+1);window.addEventListener('pharma:data-changed',f);return()=>window.removeEventListener('pharma:data-changed',f)},[])
  const sales=useMemo(()=>load<AnyRow[]>('billingInvoices',[]),[version]); const products=useMemo(()=>load<AnyRow[]>('products',[]),[version]);
@@ -55,7 +55,150 @@ export default function Sales({language,globalSearch='',onEditInvoice}:Props){
  const stats=useMemo(()=>({total:sales.reduce((a,s)=>a+saleTotal(s),0),paid:sales.reduce((a,s)=>a+salePaid(s),0),pending:sales.reduce((a,s)=>a+saleBalance(s),0),discount:sales.reduce((a,s)=>a+saleDiscount(s),0),refund:sales.reduce((a,s)=>a+n(s.refundTotal),0)}),[sales])
  const update=(id:string,fn:(x:AnyRow)=>AnyRow)=>{save('billingInvoices',sales.map(s=>String(s.id)===String(id)?fn(s):s));setVersion(v=>v+1)}
  const addPayment=(sale:AnyRow,amount:number,note:string,toWallet:boolean)=>{amount=round(amount);if(amount<=0||amount>saleBalance(sale))return;const prev=salePaid(sale),next=round(prev+amount),balance=round(Math.max(0,saleTotal(sale)-next)),rec={id:`pay-${Date.now()}`,amount,note,cashWallet:toWallet,method:toWallet?'Cash Wallet':'Manual',currency:sale.currency||'AFN',date:new Date().toISOString().slice(0,10),createdAt:new Date().toISOString()};update(sale.id,x=>({...x,paid:next,paidAmount:next,remaining:balance,balance,paymentStatus:balance<=0?'paid':'partial',paymentHistory:[...(x.paymentHistory||[]),rec],updatedAt:new Date().toISOString()}));if(toWallet){const tx=load<AnyRow[]>('transactions',[]);save('transactions',[{id:`payment-${sale.id}-${Date.now()}`,type:'income',transactionType:'deposit',title:`Payment ${invoiceNo(sale)}`,amount,currency:sale.currency||'AFN',date:new Date().toISOString().slice(0,10),source:'cash-wallet',referenceSource:'billing-payment',referenceId:sale.id,description:note||sale.customerName},...tx])}if(sale.customerId){const cs=load<AnyRow[]>('customers',[]);save('customers',cs.map(c=>String(c.id)===String(sale.customerId)?{...c,pending:Math.max(0,n(c.pending)-amount),updatedAt:new Date().toISOString()}:c))}setPayment(null)}
- const doRefund=(sale:AnyRow,request:{amount:number;note:string;mode:'quantity'|'percent'|'amount';percent?:number;items?:AnyRow[]})=>{const amount=round(n(request.amount));const note=String(request.note||'').trim();const refundedItems=Array.isArray(request.items)?request.items:[];if(amount<=0||amount>salePaid(sale)||!note)return;const sourceItems=items(sale);if(refundedItems.length){const currentProducts=load<AnyRow[]>('products',[]);const nextProducts=currentProducts.map(product=>{const returned=refundedItems.find(item=>String(item.productId)===String(product.id));if(!returned)return product;const original=sourceItems.find(item=>String(item.productId)===String(product.id));const originalQty=Math.max(0,itemQty(original||{}));const originalStockQty=Math.max(0,n(original?.stockQty??originalQty));const refundQty=Math.max(0,n(returned.quantity));const stockToRestore=originalQty>0?originalStockQty*(refundQty/originalQty):n(returned.stockQty);return {...product,quantity:round(n(product.quantity)+stockToRestore),updatedAt:new Date().toISOString()}});save('products',nextProducts)}update(sale.id,x=>{const nextPaid=round(Math.max(0,salePaid(x)-amount));const balance=saleBalance(x);return {...x,paid:nextPaid,paidAmount:nextPaid,balance,remaining:balance,paymentStatus:balance<=0?'paid':'loan',refundTotal:round(n(x.refundTotal)+amount),refundHistory:[...(x.refundHistory||[]),{id:`refund-${Date.now()}`,amount,note,currency:x.currency||'AFN',mode:request.mode||'amount',percent:n(request.percent),items:refundedItems,date:new Date().toISOString().slice(0,10),createdAt:new Date().toISOString()}],updatedAt:new Date().toISOString()}});const tx=load<AnyRow[]>('transactions',[]);save('transactions',[{id:`refund-${sale.id}-${Date.now()}`,type:'expense',transactionType:'withdraw',title:`Refund ${invoiceNo(sale)}`,amount,currency:sale.currency||'AFN',source:'cash-wallet',referenceSource:'billing-refund',category:'Cash Wallet',referenceId:sale.id,date:new Date().toISOString().slice(0,10),description:note},...tx]);setRefund(null)}
+ const doRefund=(sale:AnyRow,request:{amount:number;note:string;mode:'quantity'|'percent'|'amount';percent?:number;items?:AnyRow[]})=>{
+  const amount=round(n(request.amount))
+  const note=String(request.note||'').trim()
+  const refundedItems=Array.isArray(request.items)?request.items:[]
+  if(amount<=0||amount>salePaid(sale)||!note)return
+
+  const sourceItems=items(sale)
+  if(refundedItems.length){
+   const currentProducts=load<AnyRow[]>('products',[])
+   const nextProducts=currentProducts.map(product=>{
+    const returned=refundedItems.find((item:AnyRow)=>String(item.productId)===String(product.id))
+    if(!returned)return product
+    const original=sourceItems.find((item:AnyRow)=>String(item.productId)===String(product.id))
+    const originalQty=Math.max(0,itemQty(original||{}))
+    const originalStockQty=Math.max(0,n(original?.stockQty??originalQty))
+    const refundQty=Math.max(0,n(returned.quantity))
+    const stockToRestore=originalQty>0?originalStockQty*(refundQty/originalQty):n(returned.stockQty)
+    return {...product,quantity:round(n(product.quantity)+stockToRestore),updatedAt:new Date().toISOString()}
+   })
+   save('products',nextProducts)
+  }
+
+  const refundId=`refund-${Date.now()}`
+  const transactionId=`refund-tx-${sale.id}-${Date.now()}`
+  const now=new Date().toISOString()
+  const date=now.slice(0,10)
+  const refundProfit=round(refundedItems.length
+   ? refundedItems.reduce((sum:number,returned:AnyRow)=>{
+    const original=sourceItems.find((item:AnyRow)=>String(item.productId)===String(returned.productId))
+    const originalQty=Math.max(0,itemQty(original||{}))
+    const unitCost=n(original?.purchase??original?.purchasePrice??original?.cost)
+    const qty=Math.max(0,n(returned.quantity??returned.qty))
+    const refundAmount=n(returned.amount)
+    return sum+(refundAmount-qty*unitCost)
+   },0)
+   : (saleTotal(sale)>0 ? amount/saleTotal(sale)*saleProfit(sale,load<AnyRow[]>('products',[])) : 0))
+
+  update(sale.id,x=>{
+   const previousRefund=round(n(x.refundTotal))
+   const nextRefund=round(previousRefund+amount)
+   const nextPaid=round(Math.max(0,salePaid(x)-amount))
+   const effectiveTotal=round(Math.max(0,saleTotal(x)-nextRefund))
+   const balance=round(Math.max(0,effectiveTotal-nextPaid))
+   return {
+    ...x,
+    paid:nextPaid,
+    paidAmount:nextPaid,
+    balance,
+    remaining:balance,
+    paymentStatus:balance<=0?'paid':nextPaid>0?'partial':'loan',
+    refundTotal:nextRefund,
+    refundHistory:[...(x.refundHistory||[]),{
+     id:refundId,
+     transactionId,
+      amount,
+      refundProfit,
+      note,
+     currency:x.currency||'AFN',
+     mode:request.mode||'amount',
+     percent:n(request.percent),
+     items:refundedItems,
+     date,
+     createdAt:now
+    }],
+    updatedAt:now
+   }
+  })
+
+  const tx=load<AnyRow[]>('transactions',[])
+  save('transactions',[{
+   id:transactionId,
+   refundId,
+   type:'expense',
+   transactionType:'withdraw',
+   title:`Refund ${invoiceNo(sale)}`,
+   amount,
+   currency:sale.currency||'AFN',
+   source:'cash-wallet',
+   referenceSource:'billing-refund',
+   category:'Cash Wallet',
+   referenceId:sale.id,
+   date,
+   createdAt:now,
+   description:note
+  },...tx])
+  setRefund(null)
+ }
+
+ const undoLatestRefund=(sale:AnyRow)=>{
+  const history=Array.isArray(sale.refundHistory)?sale.refundHistory:[]
+  if(!history.length){setUndoRefund(null);return}
+  const target=history[history.length-1]
+  const amount=round(n(target.amount))
+  const refundedItems=Array.isArray(target.items)?target.items:[]
+  const sourceItems=items(sale)
+
+  if(refundedItems.length){
+   const currentProducts=load<AnyRow[]>('products',[])
+   const nextProducts=currentProducts.map(product=>{
+    const returned=refundedItems.find((item:AnyRow)=>String(item.productId)===String(product.id))
+    if(!returned)return product
+    const original=sourceItems.find((item:AnyRow)=>String(item.productId)===String(product.id))
+    const originalQty=Math.max(0,itemQty(original||{}))
+    const originalStockQty=Math.max(0,n(original?.stockQty??originalQty))
+    const refundQty=Math.max(0,n(returned.quantity))
+    const stockToRededuct=originalQty>0?originalStockQty*(refundQty/originalQty):n(returned.stockQty)
+    return {...product,quantity:round(Math.max(0,n(product.quantity)-stockToRededuct)),updatedAt:new Date().toISOString()}
+   })
+   save('products',nextProducts)
+  }
+
+  update(sale.id,x=>{
+   const nextHistory=(Array.isArray(x.refundHistory)?x.refundHistory:[]).filter((r:AnyRow)=>String(r.id)!==String(target.id))
+   const nextRefund=round(Math.max(0,n(x.refundTotal)-amount))
+   const nextPaid=round(salePaid(x)+amount)
+   const effectiveTotal=round(Math.max(0,saleTotal(x)-nextRefund))
+   const balance=round(Math.max(0,effectiveTotal-nextPaid))
+   return {
+    ...x,
+    paid:nextPaid,
+    paidAmount:nextPaid,
+    balance,
+    remaining:balance,
+    paymentStatus:balance<=0?'paid':nextPaid>0?'partial':'loan',
+    refundTotal:nextRefund,
+    refundHistory:nextHistory,
+    updatedAt:new Date().toISOString()
+   }
+  })
+
+  let tx=load<AnyRow[]>('transactions',[])
+  let removed=false
+  tx=tx.filter((row:AnyRow)=>{
+   if(removed)return true
+   const exact=target.transactionId && String(row.id)===String(target.transactionId)
+   const linked=String(row.referenceSource||'')==='billing-refund' &&
+    String(row.referenceId||'')===String(sale.id) &&
+    (!target.transactionId && Math.abs(n(row.amount)-amount)<0.0001)
+   if(exact||linked){removed=true;return false}
+   return true
+  })
+  save('transactions',tx)
+  setUndoRefund(null)
+ }
  const remove=(sale:AnyRow)=>{
   const deleted=load<AnyRow[]>('deletedItems',[])
   const tx=load<AnyRow[]>('transactions',[])
@@ -135,7 +278,7 @@ export default function Sales({language,globalSearch='',onEditInvoice}:Props){
  const printInvoice=(s:AnyRow)=>{const w=window.open('','_blank','width=900,height=900');if(!w)return;w.document.write(`<html><head><title>${invoiceNo(s)}</title><style>body{font-family:Arial;padding:35px;color:#172a57}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{padding:10px;border-bottom:1px solid #ddd}</style></head><body><h1>Pharma Pro</h1><h3>${invoiceNo(s)}</h3><p>${s.customerName||''} • ${fmtDate(iso(s))}</p><table><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr>${items(s).map(i=>`<tr><td>${i.name||''}</td><td>${itemQty(i)} ${i.unit||''}</td><td>${money(n(i.price),s.currency)}</td><td>${money(itemTotal(i),s.currency)}</td></tr>`).join('')}</table><h2>${money(saleTotal(s),s.currency)}</h2></body></html>`);w.document.close();setTimeout(()=>w.print(),100)}
  return <div className="w-full pb-10">
   <div className="flex items-start justify-between gap-3"><div><h1 className="text-2xl font-extrabold">{t.title}</h1><p className="mt-1 text-sm text-slate-500 dark:text-slate-300">{t.sub}</p></div><button onClick={()=>window.print()} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold dark:border-[#24365f] dark:bg-[#111a2c]"><Printer size={16}/>{t.print}</button></div>
-  <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Stat icon={ShoppingCart} label={t.total} value={money(stats.total)} tone="blue"/><Stat icon={DollarSign} label={t.paid} value={money(stats.paid)} tone="green"/><Stat icon={CreditCard} label={t.pending} value={money(stats.pending)} tone="orange"/><Stat icon={RefreshCcw} label={t.discount} value={money(stats.discount)} tone="red"/></div>
+  <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Stat icon={ShoppingCart} label={t.total} value={money(stats.total)} tone="blue"/><Stat icon={DollarSign} label={t.paid} value={money(stats.paid)} tone="green"/><Stat icon={CreditCard} label={t.pending} value={money(stats.pending)} tone="orange"/><Stat icon={RefreshCcw} label={t.discount} value={money(stats.discount)} tone="red"/><Stat icon={RefreshCcw} label={t.refunds} value={money(stats.refund)} tone="orange"/></div>
   <div className="app-panel mt-5 rounded-xl border border-slate-200 bg-white p-4 dark:border-[#24365f] dark:bg-[#111a2c]">
    <div className="grid gap-3 sm:grid-cols-[145px_165px_minmax(0,1fr)]">
     <FilterSelect ariaLabel={t.allTime} value={period} onChange={setPeriod} options={[{value:'all',label:t.allTime},{value:'today',label:t.today},{value:'week',label:t.week},{value:'month',label:t.month},{value:'year',label:t.year}]}/>
@@ -143,8 +286,8 @@ export default function Sales({language,globalSearch='',onEditInvoice}:Props){
     <label className="relative min-w-0"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 rtl:left-auto rtl:right-3"/><input className="form-control h-10 w-full pl-9 rtl:pl-3 rtl:pr-9" value={search} onChange={e=>setSearch(e.target.value)} placeholder={t.search}/></label>
    </div>
   </div>
-  <section className="app-panel mt-5 overflow-visible rounded-xl border border-slate-200 bg-white p-5 dark:border-[#24365f] dark:bg-[#111a2c]"><div className="mb-4 flex items-center justify-end gap-2 font-bold"><ShoppingCart size={18}/>{t.sales} ({visible.length})</div><div className="overflow-x-auto"><table className="w-full min-w-[980px] text-sm"><thead><tr className="border-b border-slate-200 text-slate-500 dark:border-[#24365f] dark:text-slate-300"><th className="px-3 py-3 text-start">{t.invoice}</th><th className="px-3 py-3 text-start">{t.customer}</th><th className="px-3 py-3">{t.items}</th><th className="px-3 py-3">{t.totalCol}</th><th className="px-3 py-3">{t.paidCol}</th><th className="px-3 py-3">{t.status}</th><th className="px-3 py-3">{t.date}</th><th className="px-3 py-3">{t.actions}</th></tr></thead><tbody>{visible.map(s=><tr key={s.id||invoiceNo(s)} className="border-b border-slate-100 last:border-0 dark:border-[#24365f]"><td className="px-3 py-4 font-mono font-bold">{invoiceNo(s)}</td><td className="px-3 py-4">{s.customerName||'-'}</td><td className="px-3 py-4 text-center">{items(s).length}</td><td className="px-3 py-4 text-center font-semibold">{money(saleTotal(s),s.currency)}</td><td className="px-3 py-4 text-center">{money(salePaid(s),s.currency)}</td><td className="px-3 py-4 text-center"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${n(s.refundTotal)>0?'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300':saleBalance(s)<=0?'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300':'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'}`}>{n(s.refundTotal)>0?t.refunded:saleBalance(s)<=0?t.paidStatus:t.loan}</span></td><td className="px-3 py-4 text-center"><div>{fmtDate(iso(s))}</div><div className="text-xs text-slate-400">{shamsi(iso(s))}</div></td><td className="px-3 py-4 text-center"><button type="button" onClick={(e)=>{const id=String(s.id);if(menu?.id===id){setMenu(null);return}const r=e.currentTarget.getBoundingClientRect();const menuWidth=210;const estimatedHeight=saleBalance(s)>0?330:250;const left=Math.max(8,Math.min(r.left,window.innerWidth-menuWidth-8));const top=r.bottom+8+estimatedHeight<=window.innerHeight? r.bottom+8 : Math.max(8,r.top-estimatedHeight-8);setMenu({id,top,left})}} className="inline-flex h-8 min-w-9 items-center justify-center rounded-lg px-2 text-lg font-bold leading-none transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-400/40 dark:hover:bg-white/10" aria-label={t.actions}>•••</button>{menu?.id===String(s.id)&&createPortal(<><button type="button" aria-label={t.close} className="fixed inset-0 z-[80] cursor-default bg-transparent" onClick={()=>setMenu(null)}/><div dir={language==='English'?'ltr':'rtl'} className="fixed z-[90] w-[210px] overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 text-start shadow-2xl dark:border-[#30456f] dark:bg-[#0d1628]" style={{top:menu.top,left:menu.left}}><Action icon={<Eye size={15}/>} label={t.view} onClick={()=>{setView(s);setMenu(null)}}/><Action icon={<Printer size={15}/>} label={t.printInv} onClick={()=>{printInvoice(s);setMenu(null)}}/><Action icon={<Pencil size={15}/>} label={t.edit} onClick={()=>{onEditInvoice?.(String(s.id));setMenu(null)}}/><Action icon={<History size={15}/>} label={t.history} onClick={()=>{setHistory(s);setMenu(null)}}/>{saleBalance(s)>0&&<><Action icon={<Plus size={15}/>} label={t.addPayment} onClick={()=>{setPayment(s);setMenu(null)}}/><Action icon={<DollarSign size={15}/>} label={t.markPaid} onClick={()=>{addPayment(s,saleBalance(s),'Marked as paid',true);setMenu(null)}}/></>}<div className="my-1 border-t border-slate-100 dark:border-[#24365f]"/><Action icon={<RefreshCcw size={15}/>} label={t.refund} onClick={()=>{setRefund(s);setMenu(null)}}/><Action danger icon={<Trash2 size={15}/>} label={t.delete} onClick={()=>{setDel(s);setMenu(null)}}/></div></>,document.body)}</td></tr>)}</tbody></table></div>{!visible.length&&<div className="grid min-h-[150px] place-items-center text-sm text-slate-400">{t.none}</div>}</section>
-  {view&&<Details sale={view} products={products} t={t} onClose={()=>setView(null)} onPrint={()=>printInvoice(view)}/>} {history&&<HistoryModal sale={history} t={t} onClose={()=>setHistory(null)} onAdd={()=>{setPayment(history);setHistory(null)}}/>} {payment&&<PaymentModal sale={payment} t={t} onClose={()=>setPayment(null)} onSave={(a,note,w)=>addPayment(payment,a,note,w)}/>} {refund&&<RefundModal sale={refund} t={t} onClose={()=>setRefund(null)} onSave={(request)=>doRefund(refund,request)}/>} {del&&<Confirm t={t} onClose={()=>setDel(null)} onConfirm={()=>remove(del)}/>} 
+  <section className="app-panel mt-5 overflow-visible rounded-xl border border-slate-200 bg-white p-5 dark:border-[#24365f] dark:bg-[#111a2c]"><div className="mb-4 flex items-center justify-end gap-2 font-bold"><ShoppingCart size={18}/>{t.sales} ({visible.length})</div><div className="overflow-x-auto"><table className="w-full min-w-[980px] text-sm"><thead><tr className="border-b border-slate-200 text-slate-500 dark:border-[#24365f] dark:text-slate-300"><th className="px-3 py-3 text-start">{t.invoice}</th><th className="px-3 py-3 text-start">{t.customer}</th><th className="px-3 py-3">{t.items}</th><th className="px-3 py-3">{t.totalCol}</th><th className="px-3 py-3">{t.paidCol}</th><th className="px-3 py-3">{t.status}</th><th className="px-3 py-3">{t.date}</th><th className="px-3 py-3">{t.actions}</th></tr></thead><tbody>{visible.map(s=><tr key={s.id||invoiceNo(s)} className="border-b border-slate-100 last:border-0 dark:border-[#24365f]"><td className="px-3 py-4 font-mono font-bold">{invoiceNo(s)}</td><td className="px-3 py-4">{s.customerName||'-'}</td><td className="px-3 py-4 text-center">{items(s).length}</td><td className="px-3 py-4 text-center font-semibold">{money(saleTotal(s),s.currency)}</td><td className="px-3 py-4 text-center">{money(salePaid(s),s.currency)}</td><td className="px-3 py-4 text-center"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${n(s.refundTotal)>0?'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300':saleBalance(s)<=0?'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300':'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'}`}>{n(s.refundTotal)>0?t.refunded:saleBalance(s)<=0?t.paidStatus:t.loan}</span></td><td className="px-3 py-4 text-center"><div>{fmtDate(iso(s))}</div><div className="text-xs text-slate-400">{shamsi(iso(s))}</div></td><td className="px-3 py-4 text-center"><button type="button" onClick={(e)=>{const id=String(s.id);if(menu?.id===id){setMenu(null);return}const r=e.currentTarget.getBoundingClientRect();const menuWidth=210;const estimatedHeight=saleBalance(s)>0?330:250;const left=Math.max(8,Math.min(r.left,window.innerWidth-menuWidth-8));const top=r.bottom+8+estimatedHeight<=window.innerHeight? r.bottom+8 : Math.max(8,r.top-estimatedHeight-8);setMenu({id,top,left})}} className="inline-flex h-8 min-w-9 items-center justify-center rounded-lg px-2 text-lg font-bold leading-none transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-400/40 dark:hover:bg-white/10" aria-label={t.actions}>•••</button>{menu?.id===String(s.id)&&createPortal(<><button type="button" aria-label={t.close} className="fixed inset-0 z-[80] cursor-default bg-transparent" onClick={()=>setMenu(null)}/><div dir={language==='English'?'ltr':'rtl'} className="fixed z-[90] w-[210px] overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 text-start shadow-2xl dark:border-[#30456f] dark:bg-[#0d1628]" style={{top:menu.top,left:menu.left}}><Action icon={<Eye size={15}/>} label={t.view} onClick={()=>{setView(s);setMenu(null)}}/><Action icon={<Printer size={15}/>} label={t.printInv} onClick={()=>{printInvoice(s);setMenu(null)}}/><Action icon={<Pencil size={15}/>} label={t.edit} onClick={()=>{onEditInvoice?.(String(s.id));setMenu(null)}}/><Action icon={<History size={15}/>} label={t.history} onClick={()=>{setHistory(s);setMenu(null)}}/>{saleBalance(s)>0&&<><Action icon={<Plus size={15}/>} label={t.addPayment} onClick={()=>{setPayment(s);setMenu(null)}}/><Action icon={<DollarSign size={15}/>} label={t.markPaid} onClick={()=>{addPayment(s,saleBalance(s),'Marked as paid',true);setMenu(null)}}/></>}<div className="my-1 border-t border-slate-100 dark:border-[#24365f]"/><Action icon={<RefreshCcw size={15}/>} label={t.refund} onClick={()=>{setRefund(s);setMenu(null)}}/>{n(s.refundTotal)>0&&<Action icon={<RefreshCcw size={15}/>} label={t.undoRefund} onClick={()=>{setUndoRefund(s);setMenu(null)}}/>}<Action danger icon={<Trash2 size={15}/>} label={t.delete} onClick={()=>{setDel(s);setMenu(null)}}/></div></>,document.body)}</td></tr>)}</tbody></table></div>{!visible.length&&<div className="grid min-h-[150px] place-items-center text-sm text-slate-400">{t.none}</div>}</section>
+  {view&&<Details sale={view} products={products} t={t} onClose={()=>setView(null)} onPrint={()=>printInvoice(view)}/>} {history&&<HistoryModal sale={history} t={t} onClose={()=>setHistory(null)} onAdd={()=>{setPayment(history);setHistory(null)}}/>} {payment&&<PaymentModal sale={payment} t={t} onClose={()=>setPayment(null)} onSave={(a,note,w)=>addPayment(payment,a,note,w)}/>} {refund&&<RefundModal sale={refund} t={t} onClose={()=>setRefund(null)} onSave={(request)=>doRefund(refund,request)}/>} {undoRefund&&<UndoRefundConfirm sale={undoRefund} t={t} onClose={()=>setUndoRefund(null)} onConfirm={()=>undoLatestRefund(undoRefund)}/>} {del&&<Confirm t={t} onClose={()=>setDel(null)} onConfirm={()=>remove(del)}/>} 
  </div>
 }
 function Action({icon,label,onClick,danger=false}:{icon:any;label:string;onClick:()=>void;danger?:boolean}){return <button type="button" onClick={onClick} className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-start text-sm transition hover:bg-slate-50 dark:hover:bg-white/5 ${danger?'text-red-500 dark:text-red-400':'text-slate-800 dark:text-slate-100'}`}><span className={`shrink-0 ${danger?'text-red-500 dark:text-red-400':'text-slate-600 dark:text-slate-200'}`}>{icon}</span><span className="min-w-0 flex-1 whitespace-nowrap">{label}</span></button>}
@@ -179,4 +322,11 @@ function RefundModal({sale,t,onClose,onSave}:{sale:AnyRow;t:any;onClose:()=>void
   <div className="mt-5 flex flex-wrap items-center justify-end gap-2"><button type="button" className="h-10 rounded-lg border border-slate-200 bg-white px-5 font-semibold text-slate-800 dark:border-[#30456f] dark:bg-[#0c1424] dark:text-slate-100" onClick={onClose}>{t.cancel}</button><button type="button" aria-disabled={!canSave} className={`inline-flex h-10 min-w-[155px] items-center justify-center gap-2 rounded-lg px-5 font-bold text-white shadow-sm transition ${canSave?'bg-red-500 hover:bg-red-600 active:bg-red-700':'cursor-not-allowed bg-red-300 opacity-70'}`} onClick={()=>{if(!canSave)return;onSave({amount:refundValue,note,mode,percent:n(percent),items:calculatedLines.filter((line:AnyRow)=>n(line.refundQuantity)>0).map((line:AnyRow)=>({productId:line.productId,name:line.name,quantity:n(line.refundQuantity),amount:n(line.refundAmount)}))})}}><RefreshCcw size={15}/>{t.confirmRefund||'Confirm Refund'}</button></div>
  </div></Backdrop>
 }
+function UndoRefundConfirm({sale,t,onClose,onConfirm}:{sale:AnyRow;t:any;onClose:()=>void;onConfirm:()=>void}){
+ return <Backdrop><div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-slate-950 shadow-2xl dark:border-[#30456f] dark:bg-[#111a2c] dark:text-white">
+  <div className="flex items-start justify-between gap-4"><div><h2 className="text-lg font-extrabold">{t.undoTitle}</h2><p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-300">{t.undoMsg} — {invoiceNo(sale)}</p></div><button type="button" onClick={onClose}>×</button></div>
+  <div className="mt-5 flex justify-end gap-2"><button type="button" className="h-10 rounded-lg border border-slate-200 px-5 font-semibold dark:border-[#30456f]" onClick={onClose}>{t.cancel}</button><button type="button" className="h-10 rounded-lg bg-[#172a57] px-5 font-bold text-white dark:bg-amber-500 dark:text-slate-950" onClick={onConfirm}>{t.confirm}</button></div>
+ </div></Backdrop>
+}
+
 function Confirm({t,onClose,onConfirm}:{t:any;onClose:()=>void;onConfirm:()=>void}){return <Backdrop><div className="w-full max-w-md rounded-2xl bg-white p-6 text-slate-950 shadow-2xl dark:bg-[#111a2c] dark:text-white"><h2 className="text-lg font-bold">{t.deleteTitle}</h2><p className="mt-3 text-sm text-slate-500 dark:text-slate-300">{t.deleteMsg}</p><div className="mt-5 flex gap-2"><button className="h-10 rounded-lg bg-red-500 px-5 font-bold text-white" onClick={onConfirm}>{t.delete}</button><button className="h-10 rounded-lg border px-5 dark:border-[#30456f]" onClick={onClose}>{t.cancel}</button></div></div></Backdrop>}

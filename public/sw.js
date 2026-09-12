@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pharma-pro-shell-v1';
+const CACHE_NAME = 'pharma-pro-shell-v2';
 const CORE = ['/', '/index.html', '/manifest.webmanifest', '/pwa-192x192.png', '/pwa-512x512.png'];
 
 async function cacheAppShell() {
@@ -35,6 +35,7 @@ self.addEventListener('fetch', event => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  const isBuildAsset = url.pathname.startsWith('/assets/');
 
   if (req.mode === 'navigate') {
     event.respondWith((async () => {
@@ -45,6 +46,22 @@ self.addEventListener('fetch', event => {
         return fresh;
       } catch {
         return (await caches.match('/index.html')) || Response.error();
+      }
+    })());
+    return;
+  }
+
+  if (isBuildAsset) {
+    event.respondWith((async () => {
+      try {
+        const fresh = await fetch(req, { cache: 'no-store' });
+        if (fresh.ok) {
+          const cache = await caches.open(CACHE_NAME);
+          cache.put(req, fresh.clone());
+        }
+        return fresh;
+      } catch {
+        return (await caches.match(req)) || Response.error();
       }
     })());
     return;

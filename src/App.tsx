@@ -225,6 +225,39 @@ function readCollection(key: string): any[] {
 const num = (value: unknown) => Number.parseFloat(String(value ?? 0)) || 0
 const formatDashboardMoney = (value: number) => `${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ؋`
 const currencyMatches = (recordCurrency: unknown, filterCurrency: string) => !filterCurrency || filterCurrency === 'all' || String(recordCurrency || 'AFN').toUpperCase() === filterCurrency.toUpperCase()
+const invoiceGrossTotal = (invoice: any) => num(invoice.total) || (Array.isArray(invoice.items) ? invoice.items.reduce((sum: number, item: any) => sum + num(item.lineTotal ?? item.total), 0) : 0)
+const invoiceRefundTotal = (invoice: any) => num(invoice.refundTotal)
+const invoiceTotal = (invoice: any) => Math.max(0, invoiceGrossTotal(invoice) - invoiceRefundTotal(invoice))
+const invoicePaid = (invoice: any) => num(invoice.paidAmount ?? invoice.paid)
+const invoiceRefundProfit = (invoice: any) => {
+  const history = Array.isArray(invoice.refundHistory) ? invoice.refundHistory : []
+  if (!history.length) return 0
+  const sourceItems = Array.isArray(invoice.items) ? invoice.items : []
+  const grossProfit = num(invoice.profit)
+  const grossTotal = invoiceGrossTotal(invoice)
+  return history.reduce((sum: number, refund: any) => {
+    if (refund.refundProfit !== undefined || refund.profit !== undefined) return sum + num(refund.refundProfit ?? refund.profit)
+    const refundedItems = Array.isArray(refund.items) ? refund.items : []
+    if (refundedItems.length) {
+      const itemProfit = refundedItems.reduce((itemSum: number, returned: any) => {
+        const original = sourceItems.find((item: any) => String(item.productId) === String(returned.productId))
+        const originalQty = Math.max(0, num(original?.qty ?? original?.quantity))
+        const originalCost = originalQty > 0 ? num(original?.purchase ?? original?.purchasePrice ?? original?.cost) : 0
+        const qty = Math.max(0, num(returned.quantity ?? returned.qty))
+        const amount = num(returned.amount)
+        return itemSum + (amount - qty * originalCost)
+      }, 0)
+      return sum + itemProfit
+    }
+    return sum + (grossTotal > 0 ? (num(refund.amount) / grossTotal) * grossProfit : 0)
+  }, 0)
+}
+const invoiceProfit = (invoice: any) => Math.max(0, num(invoice.profit) - invoiceRefundProfit(invoice))
+const invoiceBalance = (invoice: any) => {
+  const stored = invoice.balance ?? invoice.remaining
+  return stored === undefined || stored === null ? Math.max(0, invoiceTotal(invoice) - invoicePaid(invoice)) : num(stored)
+}
+const isInvoiceFullyPaid = (invoice: any) => invoiceTotal(invoice) > 0 && invoiceBalance(invoice) <= 0.000001
 
 function recordDate(record: any): Date | null {
   const raw = record?.date || record?.invoiceDate || record?.expenseDate || record?.purchaseDate || record?.paidAt || record?.createdAt || record?.updatedAt
@@ -291,10 +324,11 @@ function Dashboard({ filter, language, onFilterChange }: { filter: DashboardFilt
   const activeProducts = stockSource.filter((p) => num(p.quantity ?? p.stock ?? p.qty) > 0).length
   const stockQuantity = stockSource.reduce((sum, p) => sum + Math.max(0, num(p.quantity ?? p.stock ?? p.qty)), 0)
   const globalStockValue = stockSource.reduce((sum, p) => sum + Math.max(0, num(p.quantity ?? p.stock ?? p.qty)) * Math.max(0, num(p.purchase ?? p.purchasePrice ?? p.cost)), 0)
-  const totalRevenue = invoices.reduce((sum, inv) => sum + num(inv.total), 0)
-  const totalPaid = invoices.reduce((sum, inv) => sum + num(inv.paidAmount ?? inv.paid), 0)
-  const pendingPayments = invoices.reduce((sum, inv) => sum + num(inv.balance ?? inv.remaining), 0)
-  const pureProfit = invoices.reduce((sum, inv) => sum + num(inv.profit), 0)
+  const paidProfitInvoices = invoices.filter(isInvoiceFullyPaid)
+  const totalRevenue = invoices.reduce((sum, inv) => sum + invoiceTotal(inv), 0)
+  const totalPaid = invoices.reduce((sum, inv) => sum + invoicePaid(inv), 0)
+  const pendingPayments = invoices.reduce((sum, inv) => sum + invoiceBalance(inv), 0)
+  const pureProfit = paidProfitInvoices.reduce((sum, inv) => sum + invoiceProfit(inv), 0)
   const totalRefundsValue = invoices.reduce((sum, inv) => sum + num(inv.refundTotal), 0)
   const totalExpensesValue = expenses.reduce((sum, e) => sum + num(e.amountBase ?? e.amount ?? e.total), 0)
   const netProfit = pureProfit - totalExpensesValue
@@ -497,6 +531,19 @@ export default function App() {
     if (page !== 'staff') setSelectedStaffId(null)
     if (page !== 'billing') setBillingEditId(null)
   }
+  const handleHeaderSearchResult = (result: { page: Page; id: string; title: string }) => {
+    if (!canReadPage(currentAccount, result.page)) return
+    setActivePage(result.page)
+    setGlobalSearch(result.title)
+    setMobileSidebarOpen(false)
+    setSelectedSupplierId(null)
+    setSelectedCustomerId(null)
+    setSelectedStaffId(null)
+    setBillingEditId(null)
+    if (result.page === 'customers') setSelectedCustomerId(result.id)
+    if (result.page === 'staff') setSelectedStaffId(result.id)
+    if (result.page === 'suppliers') setSelectedSupplierId(result.id)
+  }
 
   return (
     <div className="app-root min-h-screen bg-page text-slate-950 dark:bg-[#090f1d] dark:text-white" dir={isRtl ? 'rtl' : 'ltr'}>
@@ -511,7 +558,7 @@ export default function App() {
         onToggleCollapse={() => setSidebarCollapsed((value) => !value)}
         onNavigate={navigate}
       />
-      <Header isRtl={isRtl} language={language} onMenuClick={() => setMobileSidebarOpen(true)} onLanguageChange={setLanguage} theme={theme} onThemeChange={setTheme} sidebarCollapsed={sidebarCollapsed} onLogout={logout} searchValue={globalSearch} onSearchChange={setGlobalSearch} />
+      <Header isRtl={isRtl} language={language} onMenuClick={() => setMobileSidebarOpen(true)} onLanguageChange={setLanguage} theme={theme} onThemeChange={setTheme} sidebarCollapsed={sidebarCollapsed} onLogout={logout} searchValue={globalSearch} onSearchChange={setGlobalSearch} onSearchResult={handleHeaderSearchResult} />
       <ToastHost isRtl={isRtl} />
       {accountPickerOpen && <AccountSelector isRtl={isRtl} language={language} onSelect={selectAccount} />}
       <main className={`px-3 pb-8 pt-4 transition-[margin] duration-300 lg:px-5 ${sidebarOffsetClass}`}>

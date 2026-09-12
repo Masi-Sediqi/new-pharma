@@ -213,6 +213,21 @@ const invoiceBalance = (invoice) => {
   return Math.max(0, invoiceTotal(invoice) - invoicePaid(invoice));
 };
 
+const invoiceIsFullyPaidForProfit = (invoice) => {
+  const total = invoiceTotal(invoice);
+  const refunds = invoice.refundHistory || invoice.refunds || [];
+  const refundAmount = refunds.reduce(
+    (sum, refund) => sum + parseNumber(refund.amount),
+    0
+  );
+  const effectiveTotal = Math.max(0, total - refundAmount);
+  const paid = invoicePaid(invoice);
+
+  // Refunds reduce the effective sale total. Profit remains recognized only
+  // when the net (after-refund) invoice is fully settled.
+  return effectiveTotal <= 0.000001 || paid + 0.000001 >= effectiveTotal;
+};
+
 const productQuantity = (product) =>
   parseNumber(product.quantity ?? product.stock ?? product.currentStock);
 
@@ -549,12 +564,7 @@ const soldGoodsCost = Math.max(0, grossSoldGoodsCost - refundedGoodsCost);
 
 // Pure Profit / Net Profit are recognized only after the invoice is fully paid.
 // Revenue and Cash Wallet keep their existing behavior.
-const profitRecognizedInvoices = filteredInvoices.filter((invoice) => {
-  const total = invoiceTotal(invoice);
-  const paid = invoicePaid(invoice);
-  const balance = invoiceBalance(invoice);
-  return total > 0 && balance <= 0.000001 && paid + 0.000001 >= total;
-});
+const profitRecognizedInvoices = filteredInvoices.filter(invoiceIsFullyPaidForProfit);
 
 const recognizedRevenueByCurrency = profitRecognizedInvoices.reduce(
   (totals, invoice) =>
@@ -662,10 +672,42 @@ const recognizedSoldGoodsCost = Math.max(
   recognizedGrossCost - recognizedRefundCost
 );
 
-const basePureProfitByCurrency = subtractCurrencyTotals(
-  recognizedNetRevenueByCurrency,
-  recognizedSoldGoodsCostByCurrency
+// Calculate recognized profit invoice-by-invoice after refunds.
+// This is important for partial refunds by quantity: if 2 of 3 units are
+// returned, only the remaining 1 unit's revenue, cost and profit stay active.
+const recognizedProfitByCurrency = profitRecognizedInvoices.reduce(
+  (totals, invoice) => {
+    const refunds = invoice.refundHistory || invoice.refunds || [];
+    const refundAmount = refunds.reduce(
+      (sum, refund) => sum + parseNumber(refund.amount),
+      0
+    );
+    const netInvoiceRevenue = Math.max(0, invoiceTotal(invoice) - refundAmount);
+
+    const grossInvoiceCost = invoiceCost(
+      invoice,
+      filteredProducts,
+      { baseCurrency, exchangeRates }
+    );
+    const refundedInvoiceCost = invoiceRefundCost(
+      invoice,
+      filteredProducts,
+      { baseCurrency, exchangeRates }
+    );
+    const netInvoiceCost = Math.max(0, grossInvoiceCost - refundedInvoiceCost);
+
+    const invoiceProfitAfterRefund = netInvoiceRevenue - netInvoiceCost;
+
+    return addCurrencyTotal(
+      totals,
+      invoice.currency || baseCurrency,
+      invoiceProfitAfterRefund
+    );
+  },
+  {}
 );
+
+const basePureProfitByCurrency = recognizedProfitByCurrency;
 
 const pureProfitByCurrency = kpiRouting.pureProfit
   ? Object.entries(routedWalletByCurrency).reduce(
@@ -675,9 +717,10 @@ const pureProfitByCurrency = kpiRouting.pureProfit
   : basePureProfitByCurrency;
 
 const pureProfit =
-  recognizedRevenue -
-  recognizedRefundTotal -
-  recognizedSoldGoodsCost +
+  Object.entries(basePureProfitByCurrency).reduce(
+    (sum, [currency, amount]) => sum + toBase(parseNumber(amount), currency),
+    0
+  ) +
   (kpiRouting.pureProfit ? routedWalletBase : 0);
     const staffPayableFromPayroll = filteredStaff.reduce(
   (sum, member) =>
@@ -945,6 +988,48 @@ const netProfitByCurrency = netProfitRuleResult.totals;
     }, 0);
     const cashWalletHasNegative = Object.values(effectiveCashWalletByCurrency)
       .some((amount) => parseNumber(amount) < 0);
+
+    // Final profit rule:
+    // 1) Partial/unpaid invoices never enter Pure Profit / Net Profit.
+    // 2) Even fully-paid invoice profit is held at zero while that currency's
+    //    Cash Wallet is still negative.
+    // 3) Once the wallet reaches zero/positive, only fully-paid invoices
+    //    contribute their own profit. Other partial invoices remain excluded.
+    // Losses are still allowed to remain visible.
+    const walletGuardedPureProfitByCurrency = Object.entries(pureProfitByCurrency).reduce(
+      (totals, [currency, amount]) => {
+        const walletBalance = parseNumber(effectiveCashWalletByCurrency[currency] || 0);
+        const profitAmount = parseNumber(amount);
+        totals[currency] = walletBalance < 0 ? Math.min(0, profitAmount) : profitAmount;
+        return totals;
+      },
+      {}
+    );
+
+    const walletGuardedNetProfitByCurrency = Object.entries(netProfitByCurrency).reduce(
+      (totals, [currency, amount]) => {
+        const walletBalance = parseNumber(effectiveCashWalletByCurrency[currency] || 0);
+        const profitAmount = parseNumber(amount);
+        totals[currency] = walletBalance < 0 ? Math.min(0, profitAmount) : profitAmount;
+        return totals;
+      },
+      {}
+    );
+
+    const walletGuardedPureProfitConversion = convertCurrencyTotals(
+      walletGuardedPureProfitByCurrency,
+      displayCurrency
+    );
+    const walletGuardedNetProfitConversion = convertCurrencyTotals(
+      walletGuardedNetProfitByCurrency,
+      displayCurrency
+    );
+
+    const walletGuardedPureProfit = Object.entries(walletGuardedPureProfitByCurrency)
+      .reduce((sum, [currency, amount]) => sum + toBase(parseNumber(amount), currency), 0);
+    const walletGuardedNetProfit = Object.entries(walletGuardedNetProfitByCurrency)
+      .reduce((sum, [currency, amount]) => sum + toBase(parseNumber(amount), currency), 0);
+
     const legacyCashWallet = filteredTransactions.reduce((sum, transaction) => {
       const type = normalize(transaction.type || transaction.kind || transaction.category);
       const amount = toBase(parseNumber(transaction.amount), transaction.currency);
@@ -980,13 +1065,13 @@ const netProfitByCurrency = netProfitRuleResult.totals;
   expenseMissingCurrencies: [...expenseConversion.missing],
   lowStock,
 
-  netProfit: Object.entries(netProfitByCurrency).reduce((sum, [currency, amount]) => sum + toBase(amount, currency), 0),
+  netProfit: walletGuardedNetProfit,
   taxByCurrency: netProfitRuleResult.taxByCurrency,
   otherAdjustment: netProfitRuleResult.adjustment,
   adjustmentCurrency: netProfitRuleResult.adjustmentCurrency,
-  netProfitByCurrency,
-  netProfitConvertedTotal: netProfitConversion.total,
-  netProfitMissingCurrencies: [...netProfitConversion.missing],
+  netProfitByCurrency: walletGuardedNetProfitByCurrency,
+  netProfitConvertedTotal: walletGuardedNetProfitConversion.total,
+  netProfitMissingCurrencies: [...walletGuardedNetProfitConversion.missing],
 
   grossRevenue,
   operatingExpenseTotal,
@@ -994,10 +1079,10 @@ const netProfitByCurrency = netProfitRuleResult.totals;
   pendingByCurrency,
   pendingConvertedTotal: pendingConversion.total,
   pendingMissingCurrencies: [...pendingConversion.missing],
-  pureProfit,
-  pureProfitByCurrency,
-  pureProfitConvertedTotal: pureProfitConversion.total,
-  pureProfitMissingCurrencies: [...pureProfitConversion.missing],
+  pureProfit: walletGuardedPureProfit,
+  pureProfitByCurrency: walletGuardedPureProfitByCurrency,
+  pureProfitConvertedTotal: walletGuardedPureProfitConversion.total,
+  pureProfitMissingCurrencies: [...walletGuardedPureProfitConversion.missing],
   refundTotal,
   refundByCurrency,
   refundConvertedTotal: refundConversion.total,

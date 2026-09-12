@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Bell, Check, CheckCheck, Download, Filter, Languages, Menu, Package, Trash2,
   LogOut, Moon, Search, Settings, SlidersHorizontal, Sun, Upload, User, Volume2,
@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import type { Language } from '../i18n'
 import type { ThemeName } from '../theme'
+import type { Page } from './Sidebar'
 
 type MenuName = 'currencyFilter' | 'exchange' | 'language' | 'notifications' | 'account' | null
 
@@ -245,15 +246,42 @@ type Props = {
   onLogout?: () => void
   searchValue?: string
   onSearchChange?: (value: string) => void
+  onSearchResult?: (result: SearchResult) => void
 }
 
-export default function Header({ isRtl, language, onMenuClick, onLanguageChange, theme, onThemeChange, sidebarCollapsed, onLogout, searchValue = '', onSearchChange }: Props) {
+type SearchResult = {
+  id: string
+  page: Page
+  group: string
+  title: string
+  detail: string
+}
+
+const resultGroups: Record<string, Record<Language, string>> = {
+  medicines: { English: 'MEDICINES', دری: 'دواها', پښتو: 'درمل' },
+  godown: { English: 'GODOWN', دری: 'گدام', پښتو: 'ګدام' },
+  customers: { English: 'CUSTOMERS', دری: 'مشتریان', پښتو: 'پېرودونکي' },
+  staff: { English: 'STAFF', دری: 'کارمندان', پښتو: 'کارکوونکي' },
+  suppliers: { English: 'SUPPLIERS', دری: 'عرضه‌کننده‌ها', پښتو: 'عرضه کوونکي' },
+} as const
+
+function textValue(...values: unknown[]) {
+  return values.map((value) => String(value ?? '').trim()).find(Boolean) || ''
+}
+
+function searchMatches(query: string, ...values: unknown[]) {
+  const haystack = values.map((value) => String(value ?? '').toLowerCase()).join(' ')
+  return haystack.includes(query)
+}
+
+export default function Header({ isRtl, language, onMenuClick, onLanguageChange, theme, onThemeChange, sidebarCollapsed, onLogout, searchValue = '', onSearchChange, onSearchResult }: Props) {
   const wt = walletText[language] ?? walletText.English
   const headerRef = useRef<HTMLElement | null>(null)
   const [openMenu, setOpenMenu] = useState<MenuName>(null)
   const [notifications, setNotifications] = useState<ExpiryNotification[]>(() => expiryNotifications())
   const [readNotificationIds, setReadNotificationIds] = useState<Set<string>>(() => readStringSet(NOTIFICATION_READ_KEY))
   const [cashOpen, setCashOpen] = useState(false)
+  const [searchFocused, setSearchFocused] = useState(false)
   const [walletMode, setWalletMode] = useState<'Deposit' | 'Withdraw'>('Deposit')
   const [walletAmount, setWalletAmount] = useState('')
   const [walletCurrency, setWalletCurrency] = useState(() => localStorage.getItem(PRIMARY_CURRENCY_KEY) !== 'all' ? localStorage.getItem(PRIMARY_CURRENCY_KEY) || 'AFN' : 'AFN')
@@ -265,6 +293,90 @@ export default function Header({ isRtl, language, onMenuClick, onLanguageChange,
   const sidebarOffsetClass = sidebarCollapsed
     ? isRtl ? 'lg:mr-[72px]' : 'lg:ml-[72px]'
     : isRtl ? 'lg:mr-[260px]' : 'lg:ml-[260px]'
+  const searchQuery = searchValue.trim().toLowerCase()
+  const searchResults = useMemo<SearchResult[]>(() => {
+    if (searchQuery.length < 2) return []
+    const products = readArray('products')
+    const godownEntries = readArray('godownEntries')
+    const customers = readArray('customers')
+    const staff = readArray('staff')
+    const suppliers = readArray('suppliers')
+    const results: SearchResult[] = []
+
+    products.forEach((product, index) => {
+      const title = textValue(product.name, product.productName, product.medicineName, product.brandName)
+      if (!title || !searchMatches(searchQuery, title, product.code, product.barcode, product.category, product.brandName)) return
+      results.push({
+        id: String(product.id || product.code || `product-${index}`),
+        page: 'medicines',
+        group: 'medicines',
+        title,
+        detail: `Code: ${textValue(product.code, product.barcode, '-')} • Stock: ${textValue(product.quantity, product.stock, product.qty, 0)}`,
+      })
+    })
+
+    godownEntries.forEach((entry, index) => {
+      const rows = Array.isArray(entry.rows) ? entry.rows : []
+      const rowNames = rows.map((row: any) => textValue(row.name, row.productName)).filter(Boolean).join(', ')
+      const title = textValue(entry.productName, entry.name, rowNames, entry.billNumber)
+      if (!title || !searchMatches(searchQuery, title, entry.billNumber, entry.supplierName, rowNames)) return
+      results.push({
+        id: String(entry.id || entry.billNumber || `godown-${index}`),
+        page: 'godown',
+        group: 'godown',
+        title,
+        detail: `${textValue(entry.billNumber, 'import')} ${entry.supplierName ? `- ${entry.supplierName}` : ''}`.trim(),
+      })
+    })
+
+    customers.forEach((customer, index) => {
+      const title = textValue(customer.name, customer.customerName, customer.fullName)
+      if (!title || !searchMatches(searchQuery, title, customer.phone, customer.email, customer.address)) return
+      results.push({
+        id: String(customer.id || `customer-${index}`),
+        page: 'customers',
+        group: 'customers',
+        title,
+        detail: textValue(customer.phone, customer.email, customer.address, ''),
+      })
+    })
+
+    staff.forEach((member, index) => {
+      const title = textValue(member.name, member.fullName, member.staffName)
+      if (!title || !searchMatches(searchQuery, title, member.role, member.department, member.phone)) return
+      results.push({
+        id: String(member.id || `staff-${index}`),
+        page: 'staff',
+        group: 'staff',
+        title,
+        detail: textValue(member.role, member.department, member.phone, ''),
+      })
+    })
+
+    suppliers.forEach((supplier, index) => {
+      const title = textValue(supplier.name, supplier.supplierName, supplier.company)
+      if (!title || !searchMatches(searchQuery, title, supplier.phone, supplier.email, supplier.company)) return
+      results.push({
+        id: String(supplier.id || `supplier-${index}`),
+        page: 'suppliers',
+        group: 'suppliers',
+        title,
+        detail: textValue(supplier.company, supplier.phone, supplier.email, ''),
+      })
+    })
+
+    return results.slice(0, 8)
+  }, [searchQuery])
+  const groupedSearchResults = searchResults.reduce<Record<string, SearchResult[]>>((groups, result) => {
+    groups[result.group] = [...(groups[result.group] || []), result]
+    return groups
+  }, {})
+  const showSearchResults = searchFocused && searchQuery.length >= 2
+  const clearSearch = () => onSearchChange?.('')
+  const chooseSearchResult = (result: SearchResult) => {
+    onSearchResult?.(result)
+    setSearchFocused(false)
+  }
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDarkTheme)
@@ -409,9 +521,58 @@ export default function Header({ isRtl, language, onMenuClick, onLanguageChange,
               aria-label="Search products and customers"
               value={searchValue}
               onChange={(event) => onSearchChange?.(event.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') setSearchFocused(false)
+                if (event.key === 'Enter' && searchResults[0]) chooseSearchResult(searchResults[0])
+              }}
               placeholder={isRtl ? 'جستجوی داروها، مشتریان...' : 'Search products, customers...'}
-              className={`h-10 w-full rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-700 outline-none transition placeholder:text-slate-500 focus:border-[#172a57] focus:bg-white focus:ring-2 focus:ring-[#172a57] dark:border-[#22345d] dark:bg-[#0c1424] dark:text-white dark:placeholder:text-slate-300 dark:focus:border-amber-500 dark:focus:ring-amber-500 sm:text-sm ${isRtl ? 'pl-2 pr-8 text-right sm:pl-3 sm:pr-9' : 'pl-8 pr-2 text-left sm:pl-9 sm:pr-3'}`}
+              className={`h-10 w-full rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-700 outline-none transition placeholder:text-slate-500 focus:border-[#172a57] focus:bg-white focus:ring-2 focus:ring-[#172a57] dark:border-[#22345d] dark:bg-[#0c1424] dark:text-white dark:placeholder:text-slate-300 dark:focus:border-amber-500 dark:focus:ring-amber-500 sm:text-sm ${isRtl ? 'pl-9 pr-8 text-right sm:pl-10 sm:pr-9' : 'pl-8 pr-9 text-left sm:pl-9 sm:pr-10'}`}
             />
+            {searchValue && (
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={clearSearch}
+                className={`absolute top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-white ${isRtl ? 'left-1.5' : 'right-1.5'}`}
+              >
+                <X size={16} />
+              </button>
+            )}
+            {showSearchResults && (
+              <div
+                className={`absolute top-11 z-[80] max-h-[360px] w-full min-w-[304px] overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-900 shadow-xl dark:border-[#24365f] dark:bg-[#101827] dark:text-white ${isRtl ? 'right-0 text-right' : 'left-0 text-left'}`}
+                onMouseDown={(event) => event.preventDefault()}
+              >
+                {searchResults.length ? Object.entries(groupedSearchResults).map(([group, items]) => (
+                  <div key={group}>
+                    <div className="bg-slate-50 px-4 py-2 text-[12px] font-bold uppercase tracking-wide text-slate-500 dark:bg-white/5 dark:text-slate-300">
+                      {resultGroups[group]?.[language] || group}
+                    </div>
+                    {items.map((result) => (
+                      <button
+                        key={`${result.group}-${result.id}`}
+                        type="button"
+                        onClick={() => chooseSearchResult(result)}
+                        className="flex w-full items-center gap-3 px-4 py-3 text-start transition hover:bg-slate-50 dark:hover:bg-white/5"
+                      >
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-50 text-[#172a57] dark:bg-white/10 dark:text-amber-300">
+                          {result.group === 'medicines' ? <Package size={17} /> : result.group === 'customers' || result.group === 'staff' || result.group === 'suppliers' ? <User size={17} /> : <WalletCards size={17} />}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold text-slate-900 dark:text-white">{result.title}</span>
+                          {result.detail && <span className="mt-0.5 block truncate text-xs text-slate-500 dark:text-slate-300">{result.detail}</span>}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )) : (
+                  <div className="px-4 py-5 text-center text-sm text-slate-500 dark:text-slate-300">
+                    {language === 'English' ? 'No results found' : language === 'پښتو' ? 'پایله ونه موندل شوه' : 'نتیجه‌ای یافت نشد'}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <div className="mx-auto hidden rounded-full bg-slate-50 px-4 py-1 text-xs font-semibold text-slate-600 dark:bg-[#101827] dark:text-white md:block">{isRtl ? 'Lifetime ∞' : '∞ Lifetime'}</div>
           <div className="flex shrink-0 items-center gap-0.5 sm:gap-1.5">

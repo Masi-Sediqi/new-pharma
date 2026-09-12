@@ -768,7 +768,7 @@ function MedicineModal(props: any) {
   const boxSell = n(draft.selling)
   const stripSell = round(boxSell / stripsPerBox)
   const unitSell = round(boxSell / unitsPerBox)
-  const wc = walletCopy[language] ?? walletCopy.English
+  const wc = walletCopy[language as Language] ?? walletCopy.English
   const purchaseTotal = round(Math.max(0, n(draft.quantity)) * Math.max(0, n(draft.purchase)))
   const changeHierarchy = (patch: Partial<Draft['packHierarchy']>) => setDraft((d:Draft)=>({...d, packHierarchy:{...d.packHierarchy,...patch}}))
   const hierarchyToggleText = language === 'English'
