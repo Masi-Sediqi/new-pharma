@@ -132,7 +132,7 @@ const normalizedPayments=(invoice:Invoice):Payment[]=>{
     currency:invoice.currency||'AFN',
     synthetic:true,
   }]:[]
-  return [...synthetic,...raw].sort((a,b)=>String(a.createdAt||a.date||'').localeCompare(String(b.createdAt||b.date||'')))
+  return [...synthetic,...raw].sort((a,b)=>String(b.createdAt||b.date||'').localeCompare(String(a.createdAt||a.date||'')))
 }
 
 const text={
@@ -208,7 +208,7 @@ export default function CustomerDetails({customerId,language,onBack}:{customerId
   const query=`${invoiceNo(i)} ${invDate(i)} ${i.customerName||''}`.toLowerCase()
   const matchesStatus=status==='all'||(status==='paid'&&isPaid(i))||(status==='pending'&&!isPaid(i))
   return (!search||query.includes(search.toLowerCase()))&&matchesStatus&&inPeriod(invDate(i),period)
- })
+ }).sort((a,b)=>String(b.createdAt||invDate(b)||'').localeCompare(String(a.createdAt||invDate(a)||'')))
 
  const totalSpent=invoices.reduce((s,i)=>s+invTotal(i),0)
  const totalRevenue=invoices.reduce((s,i)=>s+invPaid(i),0)
@@ -218,7 +218,7 @@ export default function CustomerDetails({customerId,language,onBack}:{customerId
  const profitEarned=recognized.reduce((s,i)=>s+invoiceProfit(i),0)
  const loans=invoices.filter(isLoanInvoice)
 
- const payments=filtered.flatMap(invoice=>normalizedPayments(invoice).map(payment=>({invoice,payment})))
+ const payments=filtered.flatMap(invoice=>normalizedPayments(invoice).map(payment=>({invoice,payment}))).sort((a,b)=>String(b.payment.createdAt||b.payment.date||'').localeCompare(String(a.payment.createdAt||a.payment.date||'')))
  const filteredLoans=filtered.filter(isLoanInvoice)
  const profitRows=filtered.filter(isPaid)
  const revenueFrom=profitRows.reduce((s,i)=>s+invTotal(i),0)

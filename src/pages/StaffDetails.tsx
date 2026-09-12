@@ -13,6 +13,7 @@ const CreditCard = (p:IconProps)=><SvgIcon {...p}><rect x="2" y="5" width="20" h
 const WalletCards = (p:IconProps)=><SvgIcon {...p}><path d="M18 7V5a2 2 0 0 0-2-2H5a3 3 0 0 0 0 6h14a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a3 3 0 0 1-3-3V6"/><path d="M16 13h2"/></SvgIcon>
 const Search = (p:IconProps)=><SvgIcon {...p}><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></SvgIcon>
 const Printer = (p:IconProps)=><SvgIcon {...p}><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></SvgIcon>
+const ChevronDownIcon = (p:IconProps)=><SvgIcon {...p}><path d="m6 9 6 6 6-6"/></SvgIcon>
 const Plus = (p:IconProps)=><SvgIcon {...p}><path d="M12 5v14M5 12h14"/></SvgIcon>
 const Eye = (p:IconProps)=><SvgIcon {...p}><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></SvgIcon>
 const Edit3 = (p:IconProps)=><SvgIcon {...p}><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></SvgIcon>
@@ -202,8 +203,8 @@ function SmoothSelect({value,onChange,options}:{value:string;onChange:(v:string)
  const [open,setOpen]=useState(false)
  const selected=options.find(o=>o.value===value)||options[0]
  return <div className="relative mt-1">
-  <button type="button" onClick={()=>setOpen(v=>!v)} className="form-control flex items-center justify-between text-start">
-   <span>{selected?.label}</span><span className={`transition-transform ${open?'rotate-180':''}`}>⌄</span>
+  <button type="button" onClick={()=>setOpen(v=>!v)} className="form-control flex items-center justify-between gap-2 text-start">
+   <span className="truncate">{selected?.label}</span><span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-slate-50 text-slate-500 dark:bg-white/10 dark:text-slate-200"><ChevronDownIcon size={15} className={`transition-transform ${open?'rotate-180':''}`}/></span>
   </button>
   {open&&<>
    <button type="button" className="fixed inset-0 z-[119] cursor-default" onClick={()=>setOpen(false)}/>

@@ -1,7 +1,7 @@
 import { Component, lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import {
-  Archive, Banknote, Box, CalendarDays, Check, CircleDollarSign, Clock3, Package, RefreshCcw,
+  Archive, Banknote, Box, CalendarDays, Check, ChevronDown, CircleDollarSign, Clock3, Package, RefreshCcw,
   Crown, ShieldCheck, ShoppingCart, TrendingUp, User, Users, RotateCcw, Warehouse, ArrowLeft, Search, Printer, Plus, Filter, Tag, Truck, MoreHorizontal, Edit3, Trash2, WalletCards, X
 } from 'lucide-react'
 import Header from './components/Header'
@@ -18,6 +18,11 @@ import SupplierDetails from './pages/SupplierDetails'
 import Billing from './pages/Billing'
 import type { Language } from './i18n'
 import type { ThemeName } from './theme'
+import {
+  calculateSupplierRowPaid,
+  calculateSupplierSummaryByCurrency,
+  roundSupplierMoney,
+} from './utils/supplierLedgerAccounting'
 
 const Medicines = lazy(() => import('./pages/Medicines'))
 const Customers = lazy(() => import('./pages/Customers'))
@@ -252,8 +257,49 @@ const addCurrencyAmount = (totals: Record<string, number>, currency: unknown, am
   totals[code] = (totals[code] || 0) + num(amount)
   return totals
 }
+function readCurrencySettings() {
+  try {
+    const raw = JSON.parse(localStorage.getItem('settings') || '[]')
+    const settings = Array.isArray(raw) ? (raw[0] || {}) : (raw || {})
+    return {
+      baseCurrency: String(settings.baseCurrency || 'AFN').toUpperCase(),
+      exchangeRates: { AFN: 1, ...(settings.exchangeRates || {}) } as Record<string, number>,
+    }
+  } catch {
+    return { baseCurrency: 'AFN', exchangeRates: { AFN: 1 } as Record<string, number> }
+  }
+}
+function activeExchangeCurrency() {
+  const target = String(localStorage.getItem('isp-exchange-from-currency') || 'original').toUpperCase()
+  return !target || target === 'ORIGINAL' || target === 'ALL' ? '' : target
+}
+function currencyRate(currency: string, baseCurrency: string, exchangeRates: Record<string, number>) {
+  const code = String(currency || baseCurrency || 'AFN').toUpperCase()
+  if (code === baseCurrency) return 1
+  return num(exchangeRates[code])
+}
+function convertCurrencyAmount(amount: number, fromCurrency: string, toCurrency: string) {
+  const { baseCurrency, exchangeRates } = readCurrencySettings()
+  const from = String(fromCurrency || baseCurrency).toUpperCase()
+  const to = String(toCurrency || baseCurrency).toUpperCase()
+  if (from === to) return num(amount)
+  const fromRate = currencyRate(from, baseCurrency, exchangeRates)
+  const toRate = currencyRate(to, baseCurrency, exchangeRates)
+  if (!fromRate || !toRate) return Number.NaN
+  return (num(amount) / fromRate) * toRate
+}
+function displayCurrencyTotals(totals: Record<string, number>) {
+  const target = activeExchangeCurrency()
+  if (!target) return totals
+  return Object.entries(totals).reduce((acc, [currency, amount]) => {
+    const converted = convertCurrencyAmount(num(amount), currency, target)
+    if (Number.isFinite(converted)) addCurrencyAmount(acc, target, converted)
+    return acc
+  }, {} as Record<string, number>)
+}
 const formatCurrencyTotals = (totals: Record<string, number>) => {
-  const entries = Object.entries(totals).filter(([, amount]) => Math.abs(num(amount)) > 0.000001)
+  const displayTotals = displayCurrencyTotals(totals)
+  const entries = Object.entries(displayTotals).filter(([, amount]) => Math.abs(num(amount)) > 0.000001)
   if (!entries.length) return '0.00 ؋'
   const preferred = ['AFN', 'USD', 'EUR', 'GBP']
   entries.sort(([a], [b]) => {
@@ -269,12 +315,76 @@ const formatCurrencyTotals = (totals: Record<string, number>) => {
     return currency === 'USD' || currency === 'EUR' || currency === 'GBP' ? `${symbol}${value}` : `${value} ${symbol}`
   }).join('\n')
 }
+const totalsHaveNegative = (totals: Record<string, number>) => Object.values(totals).some((amount) => num(amount) < -0.000001)
+const moneyAccent = (totals: Record<string, number>, fallback: 'green' | 'blue' | 'navy' | 'orange' | 'red') => totalsHaveNegative(totals) ? 'red' : fallback
 const currencyMatches = (recordCurrency: unknown, filterCurrency: string) => !filterCurrency || filterCurrency === 'all' || String(recordCurrency || 'AFN').toUpperCase() === filterCurrency.toUpperCase()
 
 function recordDate(record: any): Date | null {
   const raw = record?.createdAt || record?.updatedAt || record?.date || record?.invoiceDate || record?.expenseDate || record?.purchaseDate || record?.paidAt
   const parsed = raw ? new Date(raw) : null
   return parsed && !Number.isNaN(parsed.getTime()) ? parsed : null
+}
+
+function recordTimestamp(record: any): number {
+  const values = [record?.createdAt, record?.updatedAt, record?.paidAt, record?.date, record?.invoiceDate, record?.expenseDate, record?.purchaseDate]
+  let best = 0
+  values.forEach((value) => {
+    const parsed = value ? new Date(String(value)).getTime() : Number.NaN
+    if (Number.isFinite(parsed)) best = Math.max(best, parsed)
+  })
+  const idTimestamp = String(record?.id || record?.referenceId || '').match(/(\d{10,})/)
+  if (idTimestamp) best = Math.max(best, Number(idTimestamp[1]))
+  return best
+}
+
+function newestFirst<T>(rows: T[]): T[] {
+  return [...rows].sort((a: any, b: any) => recordTimestamp(b) - recordTimestamp(a))
+}
+
+function supplierLedgerRowsFromGodown(godownEntries: any[]) {
+  return godownEntries.flatMap((entry: any) => {
+    const rows = Array.isArray(entry.rows) ? entry.rows : []
+    const billTotal = num(entry.total) || rows.reduce((sum: number, row: any) => sum + (num(row.total) || num(row.quantity) * num(row.purchase)), 0)
+    const billPaid = Math.min(Math.max(0, num(entry.paid)), Math.max(0, billTotal))
+    return rows.map((row: any) => {
+      const total = num(row.total) || num(row.quantity) * num(row.purchase)
+      return {
+        ...row,
+        supplierId: row.supplierId || entry.supplierId || '',
+        currency: row.currency || entry.currency || 'AFN',
+        date: row.date || entry.date,
+        createdAt: row.createdAt || entry.createdAt,
+        total,
+        paid: calculateSupplierRowPaid({ rowTotal: total, rowPaid: row.paid, billPaid, billTotal }),
+      }
+    })
+  })
+}
+
+function supplierAdjustmentsFromGodown(godownEntries: any[]) {
+  return godownEntries.flatMap((entry: any) => Array.isArray(entry.adjustments) ? entry.adjustments.map((adjustment: any) => ({ ...adjustment, supplierId: adjustment.supplierId || entry.supplierId || '' })) : [])
+}
+
+function supplierBalanceRows(suppliers: any[], godownEntries: any[], currencyFilter = 'all') {
+  const entries = supplierLedgerRowsFromGodown(godownEntries)
+  const adjustments = supplierAdjustmentsFromGodown(godownEntries)
+  const filterCurrency = String(currencyFilter || 'all').toUpperCase()
+  return suppliers.flatMap((supplier: any) => {
+    const summary = calculateSupplierSummaryByCurrency({
+      supplier,
+      entries: entries.filter((row: any) => String(row.supplierId) === String(supplier.id)),
+      adjustments: adjustments.filter((row: any) => String(row.supplierId) === String(supplier.id)),
+      baseCurrency: supplier.currency || 'AFN',
+    })
+    return Object.values(summary)
+      .filter((bucket: any) => filterCurrency === 'ALL' || String(bucket.currency || 'AFN').toUpperCase() === filterCurrency)
+      .map((bucket: any) => ({
+        ...supplier,
+        currency: bucket.currency || supplier.currency || 'AFN',
+        balanceCalc: roundSupplierMoney(bucket.remaining),
+        supplier,
+      }))
+  })
 }
 
 function dashboardTimeAgo(value: unknown) {
@@ -330,28 +440,37 @@ function Dashboard({ filter, language, onFilterChange, onNavigate, onOpenRevenue
   const allCustomers = readCollection('customers')
   const allStaffData = readCollection('staff')
   const suppliersData = readCollection('suppliers')
-  const allSupplierPurchases = readCollection('supplierPurchases')
   const allGodownEntries = readCollection('godownEntries')
   const allTransactions = readCollection('transactions')
   const invoices = allInvoices.filter((item) => isWithinDashboardFilter(item, filter) && currencyMatches(item.currency, businessCurrencyFilter))
   const expenses = allExpenses.filter((item) => isWithinDashboardFilter(item, filter) && currencyMatches(item.currency, businessCurrencyFilter))
   const customers = allCustomers.filter((item) => isWithinDashboardFilter(item, filter))
   const staffData = allStaffData.filter((item) => isWithinDashboardFilter(item, filter))
-  const supplierPurchases = allSupplierPurchases.filter((item) => isWithinDashboardFilter(item, filter) && currencyMatches(item.currency, businessCurrencyFilter))
   const godownEntries = allGodownEntries.filter((item) => isWithinDashboardFilter(item, filter) && currencyMatches(item.currency, businessCurrencyFilter))
   const transactions = allTransactions.filter((item) => isWithinDashboardFilter(item, filter) && currencyMatches(item.currency, businessCurrencyFilter))
   const stockSource = (filter === 'all' || filter === 'custom' ? products : products.filter((item) => isWithinDashboardFilter(item, filter))).filter((item) => currencyMatches(item.currency, businessCurrencyFilter))
   const activeProducts = stockSource.filter((p) => num(p.quantity ?? p.stock ?? p.qty) > 0).length
   const stockQuantity = stockSource.reduce((sum, p) => sum + Math.max(0, num(p.quantity ?? p.stock ?? p.qty)), 0)
-  const globalStockValue = stockSource.reduce((sum, p) => sum + Math.max(0, num(p.quantity ?? p.stock ?? p.qty)) * Math.max(0, num(p.purchase ?? p.purchasePrice ?? p.cost)), 0)
-  const totalRevenue = invoices.reduce((sum, inv) => sum + num(inv.total), 0)
+  const globalStockValueByCurrency: Record<string, number> = {}
+  stockSource.forEach((p:any) => addCurrencyAmount(globalStockValueByCurrency,p.currency||'AFN',Math.max(0, num(p.quantity ?? p.stock ?? p.qty)) * Math.max(0, num(p.purchase ?? p.purchasePrice ?? p.cost))))
   const totalPaid = invoices.reduce((sum, inv) => sum + num(inv.paidAmount ?? inv.paid), 0)
-  const pendingPayments = invoices.reduce((sum, inv) => sum + num(inv.balance ?? inv.remaining), 0)
   const profitInvoices = invoices.filter((inv) => invoiceFullyPaid(inv))
-  const pureProfit = profitInvoices.reduce((sum, inv) => sum + num(inv.profit), 0)
-  const totalRefundsValue = invoices.reduce((sum, inv) => sum + num(inv.refundTotal), 0)
-  const totalExpensesValue = expenses.reduce((sum, e) => sum + num(e.amountBase ?? e.amount ?? e.total), 0)
-  const netProfit = pureProfit - totalExpensesValue
+  const totalRevenueByCurrency: Record<string, number> = {}
+  const pendingPaymentsByCurrency: Record<string, number> = {}
+  const pureProfitByCurrency: Record<string, number> = {}
+  const totalRefundsByCurrency: Record<string, number> = {}
+  const totalExpensesByCurrency: Record<string, number> = {}
+  const netProfitByCurrency: Record<string, number> = {}
+  invoices.forEach((inv:any) => {
+    addCurrencyAmount(totalRevenueByCurrency, inv.currency || 'AFN', invoiceNetRevenue(inv))
+    addCurrencyAmount(pendingPaymentsByCurrency, inv.currency || 'AFN', num(inv.balance ?? inv.remaining))
+    addCurrencyAmount(totalRefundsByCurrency, inv.currency || 'AFN', num(inv.refundTotal))
+  })
+  profitInvoices.forEach((inv:any) => addCurrencyAmount(pureProfitByCurrency, inv.currency || 'AFN', invoiceNetRevenue(inv)-invoiceNetCost(inv,products)))
+  expenses.forEach((e:any) => addCurrencyAmount(totalExpensesByCurrency, e.currency || 'AFN', num(e.amountBase ?? e.amount ?? e.total)))
+  Object.keys({...pureProfitByCurrency, ...totalExpensesByCurrency}).forEach((currency) => {
+    addCurrencyAmount(netProfitByCurrency, currency, num(pureProfitByCurrency[currency]) - num(totalExpensesByCurrency[currency]))
+  })
   const currentWalletByCurrency: Record<string, number> = {}
   invoices.forEach((inv:any) => addCurrencyAmount(currentWalletByCurrency, inv.currency || 'AFN', num(inv.paidAmount ?? inv.paid)))
   expenses.forEach((expense:any) => addCurrencyAmount(currentWalletByCurrency, expense.currency || 'AFN', -num(expense.amountBase ?? expense.amount ?? expense.total)))
@@ -368,18 +487,24 @@ function Dashboard({ filter, language, onFilterChange, onNavigate, onOpenRevenue
     .filter((tx:any) => tx.source === 'cash-wallet' && tx.referenceSource === 'godown-purchase')
     .forEach((tx:any) => addCurrencyAmount(currentWalletByCurrency, tx.currency || 'AFN', -num(tx.amount)))
   const currentWalletDisplay = formatCurrencyTotals(currentWalletByCurrency)
-  const supplierAdjustments = godownEntries.flatMap((entry) => Array.isArray(entry.adjustments) ? entry.adjustments.map((a: any) => ({...a, supplierId: a.supplierId || entry.supplierId})) : [])
-  const supplierBalances = suppliersData.map((supplier) => {
-    const opening = num(supplier.openingBalance ?? supplier.balance)
-    const purchases = supplierPurchases.filter((p) => String(p.supplierId || '') === String(supplier.id || '') || p.supplierName === supplier.name)
-    const purchaseRemain = purchases.reduce((sum, p) => sum + num(p.totalPurchaseValue) - num(p.paidAmount), 0)
-    const adjustments = supplierAdjustments.filter((a) => String(a.supplierId || '') === String(supplier.id || '')).reduce((sum, a) => sum + (String(a.type).toLowerCase() === 'credit' ? -num(a.amount) : num(a.amount)), 0)
-    return opening + purchaseRemain + adjustments
+  const supplierBalances = supplierBalanceRows(suppliersData, allGodownEntries, businessCurrencyFilter).map((row) => ({ amount: num(row.balanceCalc), currency: row.currency || 'AFN' }))
+  const payablesByCurrency: Record<string, number> = {}
+  const receivablesByCurrency: Record<string, number> = {}
+  supplierBalances.forEach(({amount,currency}) => {
+    if(amount > 0) addCurrencyAmount(payablesByCurrency,currency,amount)
+    if(amount < 0) addCurrencyAmount(receivablesByCurrency,currency,Math.abs(amount))
   })
-  const totalPayablesValue = supplierBalances.filter((x) => x > 0).reduce((a,b) => a+b,0)
-  const totalReceivablesValue = supplierBalances.filter((x) => x < 0).reduce((a,b) => a+Math.abs(b),0)
-  const staffPaid = staffData.reduce((sum, s) => sum + (Array.isArray(s.payrollHistory) ? s.payrollHistory.reduce((a:any,p:any)=>a+num(p.paidAmountBase ?? p.paidAmount ?? p.amount),0) : 0), 0)
-  const staffPayable = staffData.reduce((sum, s) => { const h=Array.isArray(s.payrollHistory)?s.payrollHistory:[]; const latest=new Map<string,number>(); h.forEach((p:any)=>latest.set(`${p.start||''}_${p.end||''}_${p.currency||s.currency||'AFN'}`,num(p.payable))); return sum+[...latest.values()].reduce((a,b)=>a+b,0) },0)
+  const netSupplierBalanceByCurrency: Record<string, number> = {}
+  Object.keys({...payablesByCurrency,...receivablesByCurrency}).forEach((currency)=>addCurrencyAmount(netSupplierBalanceByCurrency,currency,num(payablesByCurrency[currency])-num(receivablesByCurrency[currency])))
+  const staffPaidByCurrency: Record<string, number> = {}
+  const staffPayableByCurrency: Record<string, number> = {}
+  staffData.forEach((s:any) => {
+    const h=Array.isArray(s.payrollHistory)?s.payrollHistory:[]
+    h.forEach((p:any)=>addCurrencyAmount(staffPaidByCurrency,p.currency||s.currency||'AFN',num(p.paidAmountBase ?? p.paidAmount ?? p.amount)))
+    const latest=new Map<string,{currency:string;amount:number}>()
+    h.forEach((p:any)=>latest.set(`${p.start||''}_${p.end||''}_${p.currency||s.currency||'AFN'}`,{currency:p.currency||s.currency||'AFN',amount:num(p.payable)}))
+    latest.forEach(({currency,amount})=>addCurrencyAmount(staffPayableByCurrency,currency,amount))
+  })
 
   const recentActivity = [
     ...allInvoices.flatMap((invoice: any) => {
@@ -432,13 +557,13 @@ function Dashboard({ filter, language, onFilterChange, onNavigate, onOpenRevenue
           <button
             type="button"
             onClick={() => setFilterOpen((value) => !value)}
-            className="flex h-10 min-w-[140px] items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 shadow-soft transition hover:border-amber-400 dark:border-[#24365f] dark:bg-[#0c1424] dark:text-white"
+            className="flex h-10 min-w-[140px] items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 shadow-soft transition hover:border-amber-400 focus:border-[#172a57] focus:outline-none focus:ring-2 focus:ring-[#172a57]/15 dark:border-[#24365f] dark:bg-[#0c1424] dark:text-white dark:focus:border-amber-500 dark:focus:ring-amber-500/20"
           >
             <span className="flex items-center gap-2">
               <CalendarDays size={16} />
               {filterLabels[filter]}
             </span>
-            <span className="text-slate-400">⌄</span>
+            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-slate-50 text-slate-500 transition dark:bg-white/10 dark:text-slate-200"><ChevronDown size={15} className={`transition-transform ${filterOpen ? 'rotate-180' : ''}`} /></span>
           </button>
           {filterOpen && (
             <div className="absolute top-11 w-[142px] overflow-hidden rounded-lg border border-slate-200 bg-white py-1 text-sm text-slate-900 shadow-lg ltr:right-0 rtl:left-0 dark:border-[#24365f] dark:bg-[#101827] dark:text-white">
@@ -463,36 +588,36 @@ function Dashboard({ filter, language, onFilterChange, onNavigate, onOpenRevenue
 
       <h2 className="mb-3 text-sm font-semibold">{t.financial}</h2>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard title={t.totalRevenue} value={formatDashboardMoney(totalRevenue)} icon={CircleDollarSign} accent="green" onClick={onOpenRevenue} />
-        <StatCard title={t.currentWallet} value={currentWalletDisplay} icon={Banknote} accent="green" onClick={onOpenCashWallet} />
-        <StatCard title={t.netProfit} value={formatDashboardMoney(netProfit)} icon={TrendingUp} accent="green" onClick={onOpenNetProfit} />
-        <StatCard title={t.pureProfit} value={formatDashboardMoney(pureProfit)} icon={TrendingUp} accent="green" onClick={onOpenPureProfit} />
+        <StatCard title={t.totalRevenue} value={formatCurrencyTotals(totalRevenueByCurrency)} icon={CircleDollarSign} accent={moneyAccent(totalRevenueByCurrency,'green')} onClick={onOpenRevenue} />
+        <StatCard title={t.currentWallet} value={currentWalletDisplay} icon={Banknote} accent={moneyAccent(currentWalletByCurrency,'green')} onClick={onOpenCashWallet} />
+        <StatCard title={t.netProfit} value={formatCurrencyTotals(netProfitByCurrency)} icon={TrendingUp} accent={moneyAccent(netProfitByCurrency,'green')} onClick={onOpenNetProfit} />
+        <StatCard title={t.pureProfit} value={formatCurrencyTotals(pureProfitByCurrency)} icon={TrendingUp} accent={moneyAccent(pureProfitByCurrency,'green')} onClick={onOpenPureProfit} />
         <StatCard title={t.totalSales} value={String(invoices.length)} icon={ShoppingCart} accent="blue" onClick={() => onOpenDetail('sales')} />
-        <StatCard title={t.totalExpenses} value={formatDashboardMoney(totalExpensesValue)} icon={Banknote} accent="navy" onClick={() => onOpenDetail('expenses')} />
-        <StatCard title={t.pendingPayments} value={formatDashboardMoney(pendingPayments)} icon={Clock3} accent="orange" onClick={() => onOpenDetail('loans')} />
-        <StatCard title={t.totalRefunds} value={formatDashboardMoney(totalRefundsValue)} icon={RefreshCcw} accent="red" onClick={() => onOpenDetail('refunds')} />
+        <StatCard title={t.totalExpenses} value={formatCurrencyTotals(totalExpensesByCurrency)} icon={Banknote} accent={moneyAccent(totalExpensesByCurrency,'navy')} onClick={() => onOpenDetail('expenses')} />
+        <StatCard title={t.pendingPayments} value={formatCurrencyTotals(pendingPaymentsByCurrency)} icon={Clock3} accent={moneyAccent(pendingPaymentsByCurrency,'orange')} onClick={() => onOpenDetail('loans')} />
+        <StatCard title={t.totalRefunds} value={formatCurrencyTotals(totalRefundsByCurrency)} icon={RefreshCcw} accent={moneyAccent(totalRefundsByCurrency,'red')} onClick={() => onOpenDetail('refunds')} />
         <StatCard title={t.totalCustomers} value={String(customers.length)} icon={Users} accent="navy" onClick={() => onOpenDetail('customers')} />
       </div>
 
       <h2 className="mb-3 mt-7 text-sm font-semibold">{t.suppliers}</h2>
       <div className="grid gap-3 lg:grid-cols-3">
-        <StatCard title={t.totalPayables} value={formatDashboardMoney(totalPayablesValue)} icon={Banknote} accent="orange" onClick={() => onOpenDetail('supplier-payables')} />
-        <StatCard title={t.totalReceivables} value={formatDashboardMoney(totalReceivablesValue)} icon={TrendingUp} accent="green" onClick={() => onOpenDetail('supplier-receivables')} />
-        <StatCard title={t.netBalance} value={formatDashboardMoney(totalPayablesValue-totalReceivablesValue)} icon={CircleDollarSign} accent="navy" onClick={() => onNavigate('suppliers')} />
+        <StatCard title={t.totalPayables} value={formatCurrencyTotals(payablesByCurrency)} icon={Banknote} accent={moneyAccent(payablesByCurrency,'orange')} onClick={() => onOpenDetail('supplier-payables')} />
+        <StatCard title={t.totalReceivables} value={formatCurrencyTotals(receivablesByCurrency)} icon={TrendingUp} accent={moneyAccent(receivablesByCurrency,'green')} onClick={() => onOpenDetail('supplier-receivables')} />
+        <StatCard title={t.netBalance} value={formatCurrencyTotals(netSupplierBalanceByCurrency)} icon={CircleDollarSign} accent={moneyAccent(netSupplierBalanceByCurrency,'navy')} onClick={() => onNavigate('suppliers')} />
       </div>
 
       <h2 className="mb-3 mt-7 text-sm font-semibold">{t.stock}</h2>
       <div className="grid gap-3 lg:grid-cols-3">
         <StatCard title={t.activeProducts} value={String(activeProducts)} icon={Box} accent="navy" onClick={() => onOpenDetail('medicines')} />
         <StatCard title={t.stockQuantity} value={String(stockQuantity)} icon={Package} accent="navy" onClick={() => onOpenDetail('stock')} />
-        <StatCard title={t.globalStockValue} value={formatDashboardMoney(globalStockValue)} icon={Archive} accent="orange" onClick={() => onOpenDetail('stock')} />
+        <StatCard title={t.globalStockValue} value={formatCurrencyTotals(globalStockValueByCurrency)} icon={Archive} accent={moneyAccent(globalStockValueByCurrency,'orange')} onClick={() => onOpenDetail('stock')} />
       </div>
 
       <h2 className="mb-3 mt-7 text-sm font-semibold">{t.staff}</h2>
       <div className="grid gap-3 lg:grid-cols-3">
         <StatCard title={t.totalStaff} value={String(staffData.length)} icon={User} accent="navy" onClick={() => onNavigate('staff')} />
-        <StatCard title={t.staffPayable} value={formatDashboardMoney(staffPayable)} icon={Banknote} accent="orange" onClick={() => onOpenDetail('staff-payroll')} />
-        <StatCard title={t.staffPaid} value={formatDashboardMoney(staffPaid)} icon={CircleDollarSign} accent="green" onClick={() => onOpenDetail('staff-payroll')} />
+        <StatCard title={t.staffPayable} value={formatCurrencyTotals(staffPayableByCurrency)} icon={Banknote} accent={moneyAccent(staffPayableByCurrency,'orange')} onClick={() => onOpenDetail('staff-payroll')} />
+        <StatCard title={t.staffPaid} value={formatCurrencyTotals(staffPaidByCurrency)} icon={CircleDollarSign} accent={moneyAccent(staffPaidByCurrency,'green')} onClick={() => onOpenDetail('staff-payroll')} />
       </div>
 
       <div className="mt-7"><TrendChart invoices={invoices} expenses={expenses} filter={filter} language={language} /></div>
@@ -568,8 +693,9 @@ function RevenueView({ language, onBack }: { language: Language; onBack: () => v
     }
   }, [])
 
-  const invoices = readCollection('billingInvoices').filter((item) => isWithinDashboardFilter(item, range))
-  const transactions = readCollection('transactions').filter((item) => isWithinDashboardFilter(item, range))
+  const businessCurrencyFilter = localStorage.getItem('isp-primary-currency') || 'all'
+  const invoices = readCollection('billingInvoices').filter((item) => isWithinDashboardFilter(item, range) && currencyMatches(item.currency, businessCurrencyFilter))
+  const transactions = readCollection('transactions').filter((item) => isWithinDashboardFilter(item, range) && currencyMatches(item.currency, businessCurrencyFilter))
   const saleRows = invoices.filter((invoice) => num(invoice.paidAmount ?? invoice.paid) > 0)
   const refundRows = invoices.flatMap((invoice) => {
     const history = Array.isArray(invoice.refundHistory) ? invoice.refundHistory : []
@@ -601,10 +727,10 @@ function RevenueView({ language, onBack }: { language: Language; onBack: () => v
 
   const q = query.trim().toLowerCase()
   const match = (...values: unknown[]) => !q || values.some((value) => String(value ?? '').toLowerCase().includes(q))
-  const filteredSales = saleRows.filter((row) => match(row.invoiceNo, row.invoiceNumber, row.customerName, row.total, row.date))
-  const filteredRefunds = refundRows.filter((row) => match(row.invoiceNo, row.customerName, row.amount, row.note, row.date, row.createdAt))
-  const filteredWithdrawals = withdrawalRows.filter((row) => match(row.amount, row.currency, row.title, row.description, row.date))
-  const filteredDeposits = depositRows.filter((row) => match(row.amount, row.currency, row.title, row.description, row.date))
+  const filteredSales = newestFirst(saleRows.filter((row) => match(row.invoiceNo, row.invoiceNumber, row.customerName, row.total, row.date)))
+  const filteredRefunds = newestFirst(refundRows.filter((row) => match(row.invoiceNo, row.customerName, row.amount, row.note, row.date, row.createdAt)))
+  const filteredWithdrawals = newestFirst(withdrawalRows.filter((row) => match(row.amount, row.currency, row.title, row.description, row.date)))
+  const filteredDeposits = newestFirst(depositRows.filter((row) => match(row.amount, row.currency, row.title, row.description, row.date)))
 
   const fmt = (value: number, currency = 'AFN') => {
     const symbol = currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : currency === 'AFN' ? '؋' : currency
@@ -724,7 +850,16 @@ function invoiceFullyPaid(inv:any){
   return net<=0.000001 || invoicePaidValue(inv)+0.000001>=net
 }
 function dateText(v:unknown){ const d=new Date(String(v||'')); return Number.isNaN(d.getTime())?'—':d.toLocaleDateString('en-US',{month:'short',day:'2-digit',year:'numeric'}) }
-function profitMoney(v:number){ return `${Math.abs(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}${v<0?'−':''} ؋` }
+function profitMoney(v:number){
+  const businessCurrency=String(localStorage.getItem('isp-primary-currency')||'AFN').toUpperCase()
+  const source=businessCurrency==='ALL'?'AFN':businessCurrency
+  const target=activeExchangeCurrency()||source
+  const display=target===source?num(v):convertCurrencyAmount(v,source,target)
+  const amount=Number.isFinite(display)?display:v
+  const symbol=dashboardCurrencySymbol(target)
+  const value=Math.abs(amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})
+  return target === 'USD' || target === 'EUR' || target === 'GBP' ? `${symbol}${value}${amount<0?'−':''}` : `${value}${amount<0?'−':''} ${symbol}`
+}
 
 function ProfitRangeSelect({value,onChange}:{value:ProfitRange;onChange:(v:ProfitRange)=>void}){
   return <select value={value} onChange={e=>onChange(e.target.value as ProfitRange)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none dark:border-[#24365f] dark:bg-[#0c1424] dark:text-white">
@@ -738,18 +873,19 @@ function ProfitSourceTable({tab,invoices,products,expenses,transactions,query}:{
   const dep = tx.filter((x:any)=>String(x.transactionType||x.type||'').toLowerCase()==='deposit'||String(x.type||'').toLowerCase()==='income')
   const wd = tx.filter((x:any)=>String(x.transactionType||x.type||'').toLowerCase()==='withdraw'||String(x.type||'').toLowerCase()==='expense')
   const wrap=(body:any)=><div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-[#24365f]"><table className="w-full min-w-[900px] text-sm">{body}</table></div>
-  if(tab==='sales') return wrap(<><thead><tr className="border-b border-slate-200 text-slate-500"><th className="px-3 py-3 text-start">Invoice</th><th className="px-3 py-3 text-start">Customer</th><th className="px-3 py-3 text-end">Gross</th><th className="px-3 py-3 text-end">Refunded</th><th className="px-3 py-3 text-end">Net</th><th className="px-3 py-3 text-end">COGS</th><th className="px-3 py-3 text-end">Gross profit</th><th className="px-3 py-3 text-start">Date</th></tr></thead><tbody>{invoices.filter(x=>hit(x.invoiceNo,x.customerName,x.total)).map((x:any)=><tr key={x.id} className="border-b border-slate-100 last:border-0"><td className="px-3 py-3 font-mono font-semibold">{x.invoiceNo||x.invoiceNumber||x.id}</td><td className="px-3 py-3">{x.customerName||x.customer||'Walk-in Customer'}</td><td className="px-3 py-3 text-end">{profitMoney(invoiceGross(x))}</td><td className="px-3 py-3 text-end text-red-500">{invoiceRefundValue(x)?`−${profitMoney(invoiceRefundValue(x)).replace('−','')}`:'—'}</td><td className="px-3 py-3 text-end font-semibold">{profitMoney(invoiceNetRevenue(x))}</td><td className="px-3 py-3 text-end">{profitMoney(invoiceNetCost(x,products))}</td><td className={`px-3 py-3 text-end font-semibold ${invoiceNetRevenue(x)-invoiceNetCost(x,products)>=0?'text-emerald-500':'text-red-500'}`}>{profitMoney(invoiceNetRevenue(x)-invoiceNetCost(x,products))}</td><td className="px-3 py-3">{dateText(x.date||x.createdAt)}</td></tr>)}</tbody></>)
+  if(tab==='sales') return wrap(<><thead><tr className="border-b border-slate-200 text-slate-500"><th className="px-3 py-3 text-start">Invoice</th><th className="px-3 py-3 text-start">Customer</th><th className="px-3 py-3 text-end">Gross</th><th className="px-3 py-3 text-end">Refunded</th><th className="px-3 py-3 text-end">Net</th><th className="px-3 py-3 text-end">COGS</th><th className="px-3 py-3 text-end">Gross profit</th><th className="px-3 py-3 text-start">Date</th></tr></thead><tbody>{newestFirst(invoices.filter(x=>hit(x.invoiceNo,x.customerName,x.total))).map((x:any)=><tr key={x.id} className="border-b border-slate-100 last:border-0"><td className="px-3 py-3 font-mono font-semibold">{x.invoiceNo||x.invoiceNumber||x.id}</td><td className="px-3 py-3">{x.customerName||x.customer||'Walk-in Customer'}</td><td className="px-3 py-3 text-end">{profitMoney(invoiceGross(x))}</td><td className="px-3 py-3 text-end text-red-500">{invoiceRefundValue(x)?`−${profitMoney(invoiceRefundValue(x)).replace('−','')}`:'—'}</td><td className="px-3 py-3 text-end font-semibold">{profitMoney(invoiceNetRevenue(x))}</td><td className="px-3 py-3 text-end">{profitMoney(invoiceNetCost(x,products))}</td><td className={`px-3 py-3 text-end font-semibold ${invoiceNetRevenue(x)-invoiceNetCost(x,products)>=0?'text-emerald-500':'text-red-500'}`}>{profitMoney(invoiceNetRevenue(x)-invoiceNetCost(x,products))}</td><td className="px-3 py-3">{dateText(x.date||x.createdAt)}</td></tr>)}</tbody></>)
   if(tab==='cogs') return wrap(<><thead><tr className="border-b border-slate-200 text-slate-500"><th className="px-3 py-3 text-start">Invoice</th><th className="px-3 py-3 text-start">Product</th><th className="px-3 py-3 text-end">Qty</th><th className="px-3 py-3 text-end">Purchase price</th><th className="px-3 py-3 text-end">Line cost</th><th className="px-3 py-3 text-start">Date</th></tr></thead><tbody>{invoices.flatMap((inv:any)=>invoiceItems(inv).map((it:any,i:number)=>({inv,it,i}))).filter((r:any)=>hit(r.inv.invoiceNo,r.it.name)).map(({inv,it,i}:any)=>{const p=products.find((x:any)=>String(x.id)===String(it.productId||it.id))||{};const qty=num(it.quantity??it.qty??1);const cost=num(it.purchasePrice??it.purchase??it.cost??p.purchase??p.purchasePrice??p.cost);return <tr key={`${inv.id}-${i}`} className="border-b border-slate-100 last:border-0"><td className="px-3 py-3 font-mono font-semibold">{inv.invoiceNo||inv.invoiceNumber||inv.id}</td><td className="px-3 py-3">{it.name||p.name||'—'}</td><td className="px-3 py-3 text-end">{qty}</td><td className="px-3 py-3 text-end">{profitMoney(cost)}</td><td className="px-3 py-3 text-end">{profitMoney(qty*cost)}</td><td className="px-3 py-3">{dateText(inv.date||inv.createdAt)}</td></tr>})}</tbody></>)
-  if(tab==='expenses') return wrap(<><thead><tr className="border-b border-slate-200 text-slate-500"><th className="px-3 py-3 text-start">Description</th><th className="px-3 py-3 text-start">Category</th><th className="px-3 py-3 text-end">Amount</th><th className="px-3 py-3 text-start">Date</th></tr></thead><tbody>{expenses.filter((x:any)=>hit(x.description,x.category,x.amount)).map((x:any)=><tr key={x.id} className="border-b border-slate-100 last:border-0"><td className="px-3 py-3">{x.description||x.title||'—'}</td><td className="px-3 py-3">{x.category||'—'}</td><td className="px-3 py-3 text-end font-semibold text-red-500">−{profitMoney(num(x.amountBase??x.amount??x.total)).replace('−','')}</td><td className="px-3 py-3">{dateText(x.date||x.createdAt)}</td></tr>)}</tbody></>)
+  if(tab==='expenses') return wrap(<><thead><tr className="border-b border-slate-200 text-slate-500"><th className="px-3 py-3 text-start">Description</th><th className="px-3 py-3 text-start">Category</th><th className="px-3 py-3 text-end">Amount</th><th className="px-3 py-3 text-start">Date</th></tr></thead><tbody>{newestFirst(expenses.filter((x:any)=>hit(x.description,x.category,x.amount))).map((x:any)=><tr key={x.id} className="border-b border-slate-100 last:border-0"><td className="px-3 py-3">{x.description||x.title||'—'}</td><td className="px-3 py-3">{x.category||'—'}</td><td className="px-3 py-3 text-end font-semibold text-red-500">−{profitMoney(num(x.amountBase??x.amount??x.total)).replace('−','')}</td><td className="px-3 py-3">{dateText(x.date||x.createdAt)}</td></tr>)}</tbody></>)
   const rows=tab==='deposits'?dep:wd
-  return wrap(<><thead><tr className="border-b border-slate-200 text-slate-500"><th className="px-3 py-3 text-end">Amount</th><th className="px-3 py-3 text-start">Currency</th><th className="px-3 py-3 text-start">Reason</th><th className="px-3 py-3 text-start">Date</th></tr></thead><tbody>{rows.filter((x:any)=>hit(x.amount,x.currency,x.description,x.title)).map((x:any)=><tr key={x.id} className="border-b border-slate-100 last:border-0"><td className={`px-3 py-3 text-end font-semibold ${tab==='deposits'?'text-emerald-500':'text-red-500'}`}>{tab==='deposits'?'+':'−'}{profitMoney(num(x.amount)).replace('−','')}</td><td className="px-3 py-3">{x.currency||'AFN'}</td><td className="px-3 py-3">{x.description||x.title||'—'}</td><td className="px-3 py-3">{dateText(x.date||x.createdAt)}</td></tr>)}</tbody></>)
+  return wrap(<><thead><tr className="border-b border-slate-200 text-slate-500"><th className="px-3 py-3 text-end">Amount</th><th className="px-3 py-3 text-start">Currency</th><th className="px-3 py-3 text-start">Reason</th><th className="px-3 py-3 text-start">Date</th></tr></thead><tbody>{newestFirst(rows.filter((x:any)=>hit(x.amount,x.currency,x.description,x.title))).map((x:any)=><tr key={x.id} className="border-b border-slate-100 last:border-0"><td className={`px-3 py-3 text-end font-semibold ${tab==='deposits'?'text-emerald-500':'text-red-500'}`}>{tab==='deposits'?'+':'−'}{profitMoney(num(x.amount)).replace('−','')}</td><td className="px-3 py-3">{x.currency||'AFN'}</td><td className="px-3 py-3">{x.description||x.title||'—'}</td><td className="px-3 py-3">{dateText(x.date||x.createdAt)}</td></tr>)}</tbody></>)
 }
 
 function NetProfitView({onBack}:{language:Language;onBack:()=>void}){
   const [range,setRange]=useState<ProfitRange>('all'); const [tab,setTab]=useState<ProfitTab>('sales'); const [query,setQuery]=useState(''); const [,setVersion]=useState(0)
   useEffect(()=>{const f=()=>setVersion(v=>v+1);window.addEventListener('pharma:data-changed',f);return()=>window.removeEventListener('pharma:data-changed',f)},[])
+  const businessCurrencyFilter=localStorage.getItem('isp-primary-currency')||'all'
   const products=readCollection('products'), allInv=readCollection('billingInvoices'), allExp=readCollection('expenses'), allTx=readCollection('transactions')
-  const invoices=allInv.filter((x:any)=>profitRangeMatches(x,range)&&invoiceFullyPaid(x)), expenses=allExp.filter((x:any)=>profitRangeMatches(x,range)), transactions=allTx.filter((x:any)=>profitRangeMatches(x,range))
+  const invoices=allInv.filter((x:any)=>profitRangeMatches(x,range)&&currencyMatches(x.currency,businessCurrencyFilter)&&invoiceFullyPaid(x)), expenses=allExp.filter((x:any)=>profitRangeMatches(x,range)&&currencyMatches(x.currency,businessCurrencyFilter)), transactions=allTx.filter((x:any)=>profitRangeMatches(x,range)&&currencyMatches(x.currency,businessCurrencyFilter))
   const revenue=invoices.reduce((s:number,x:any)=>s+invoiceNetRevenue(x),0), cogs=invoices.reduce((s:number,x:any)=>s+invoiceNetCost(x,products),0), gross=revenue-cogs, exp=expenses.reduce((s:number,x:any)=>s+num(x.amountBase??x.amount??x.total),0), net=gross-exp
   const tabs:[ProfitTab,string,number][]=[['sales','Sales',invoices.length],['cogs','COGS breakdown',invoices.length],['expenses','Expenses',expenses.length],['deposits','Deposits',transactions.filter((x:any)=>String(x.transactionType||x.type).toLowerCase()==='deposit'||String(x.type).toLowerCase()==='income').length],['withdrawals','Withdrawals',transactions.filter((x:any)=>String(x.transactionType||x.type).toLowerCase()==='withdraw'||String(x.type).toLowerCase()==='expense').length]]
   return <div><div className="mb-5 flex items-start justify-between gap-3"><div className="flex items-start gap-3"><button onClick={onBack} className="mt-1 grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white"><ArrowLeft size={17}/></button><div><h1 className="text-2xl font-bold">Net Profit (After Expenses & Refunds)</h1><p className="text-sm text-slate-500">Pure profit after all costs and expenses</p></div></div><div className="flex gap-2"><ProfitRangeSelect value={range} onChange={setRange}/><button onClick={()=>window.print()} className="h-10 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold"><Printer size={15} className="me-2 inline"/>Print</button></div></div>
@@ -761,8 +897,9 @@ function NetProfitView({onBack}:{language:Language;onBack:()=>void}){
 function PureProfitView({onBack}:{language:Language;onBack:()=>void}){
   const [range,setRange]=useState<ProfitRange>('all'); const [tab,setTab]=useState<ProfitTab>('sales'); const [query,setQuery]=useState(''); const [,setVersion]=useState(0)
   useEffect(()=>{const f=()=>setVersion(v=>v+1);window.addEventListener('pharma:data-changed',f);return()=>window.removeEventListener('pharma:data-changed',f)},[])
+  const businessCurrencyFilter=localStorage.getItem('isp-primary-currency')||'all'
   const products=readCollection('products'), allInv=readCollection('billingInvoices'), allTx=readCollection('transactions')
-  const invoices=allInv.filter((x:any)=>profitRangeMatches(x,range)&&invoiceFullyPaid(x)), transactions=allTx.filter((x:any)=>profitRangeMatches(x,range))
+  const invoices=allInv.filter((x:any)=>profitRangeMatches(x,range)&&currencyMatches(x.currency,businessCurrencyFilter)&&invoiceFullyPaid(x)), transactions=allTx.filter((x:any)=>profitRangeMatches(x,range)&&currencyMatches(x.currency,businessCurrencyFilter))
   const revenue=invoices.reduce((s:number,x:any)=>s+invoiceNetRevenue(x),0), cogs=invoices.reduce((s:number,x:any)=>s+invoiceNetCost(x,products),0), pure=revenue-cogs, margin=revenue>0?(pure/revenue)*100:0
   const tabs:[ProfitTab,string,number][]=[['sales','Sales',invoices.length],['cogs','COGS breakdown',invoices.length],['deposits','Deposits',transactions.filter((x:any)=>String(x.transactionType||x.type).toLowerCase()==='deposit'||String(x.type).toLowerCase()==='income').length],['withdrawals','Withdrawals',transactions.filter((x:any)=>String(x.transactionType||x.type).toLowerCase()==='withdraw'||String(x.type).toLowerCase()==='expense').length]]
   return <div><div className="mb-5 flex items-start justify-between gap-3"><div className="flex items-start gap-3"><button onClick={onBack} className="mt-1 grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white"><ArrowLeft size={17}/></button><div><h1 className="text-2xl font-bold">Pure Profit Breakdown</h1><p className="text-sm text-slate-500">Raw goods margin without expenses deducted</p></div></div><div className="flex gap-2"><ProfitRangeSelect value={range} onChange={setRange}/><button onClick={()=>window.print()} className="h-10 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold"><Printer size={15} className="me-2 inline"/>Print</button></div></div>
@@ -832,8 +969,10 @@ function CashWalletView({ language, onBack }: { language: Language; onBack: () =
     edit:'سمون', delete:'ړنګول'
   }
 
-  const invoices=readCollection('billingInvoices')
-  const transactions=readCollection('transactions')
+  const businessCurrencyFilter=localStorage.getItem('isp-primary-currency')||'all'
+  const invoices=readCollection('billingInvoices').filter((inv:any)=>currencyMatches(inv.currency,businessCurrencyFilter))
+  const products=readCollection('products')
+  const transactions=readCollection('transactions').filter((tx:any)=>currencyMatches(tx.currency,businessCurrencyFilter))
   const suppliers=readCollection('suppliers')
 
   const dateInRange=(raw:unknown)=>{
@@ -855,7 +994,7 @@ function CashWalletView({ language, onBack }: { language: Language; onBack: () =
   const paidByCurrency: Record<string, number> = {}
   invoices.forEach((inv:any)=>addCurrencyAmount(paidByCurrency,inv.currency||'AFN',num(inv.paidAmount??inv.paid)))
   const profitByCurrency: Record<string, number> = {}
-  invoices.filter((inv:any)=>invoiceFullyPaid(inv)).forEach((inv:any)=>addCurrencyAmount(profitByCurrency,inv.currency||'AFN',num(inv.profit)))
+  invoices.filter((inv:any)=>invoiceFullyPaid(inv)).forEach((inv:any)=>addCurrencyAmount(profitByCurrency,inv.currency||'AFN',invoiceNetRevenue(inv)-invoiceNetCost(inv,products)))
   const depositsByCurrency: Record<string, number> = {}
   depositRows.forEach((tx:any)=>addCurrencyAmount(depositsByCurrency,tx.currency||'AFN',num(tx.amount)))
   const withdrawalsByCurrency: Record<string, number> = {}
@@ -871,13 +1010,13 @@ function CashWalletView({ language, onBack }: { language: Language; onBack: () =
   }
   const categoryOptions=Array.from(new Set(walletTransactions.map(txCategory).filter(Boolean)))
   const supplierOptions=Array.from(new Set(walletTransactions.map(txSupplier).filter(Boolean)))
-  const visibleRows=walletTransactions.filter((tx:any)=>{
+  const visibleRows=newestFirst(walletTransactions.filter((tx:any)=>{
     const kindOk=kind==='all'||(kind==='deposits'&&isDeposit(tx))||(kind==='withdrawals'&&isWithdraw(tx))||(kind==='expenses'&&isWithdraw(tx))
     const supplierOk=supplier==='all'||txSupplier(tx)===supplier
     const categoryOk=category==='all'||txCategory(tx)===category
     const searchOk=!q||[tx.amount,tx.currency,tx.title,tx.description,tx.referenceSource,txCategory(tx),txSupplier(tx)].some(v=>String(v??'').toLowerCase().includes(q))
     return kindOk&&supplierOk&&categoryOk&&searchOk&&dateInRange(tx.date||tx.createdAt)
-  }).sort((a:any,b:any)=>new Date(b.createdAt||b.date||0).getTime()-new Date(a.createdAt||a.date||0).getTime())
+  }))
 
   const fmt=(v:number,c='AFN')=>{const s=c==='USD'?'$':c==='EUR'?'€':c==='GBP'?'£':c==='AFN'?'؋':c;return `${num(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} ${s}`}
   const dateText=(v:unknown)=>{const d=new Date(String(v||''));return Number.isNaN(d.getTime())?'—':d.toLocaleDateString('en-US',{month:'short',day:'2-digit',year:'numeric'})}
@@ -903,7 +1042,7 @@ function CashWalletView({ language, onBack }: { language: Language; onBack: () =
   const kindOptions:[WalletKind,string][]=[['all',labels.all],['sales',labels.sales],['profit',labels.profit],['deposits',labels.deposits],['withdrawals',labels.withdrawals],['expenses',labels.expenses]]
   const rangeOptions:[WalletRange,string][]=[['all',labels.allTime],['today',labels.today],['week',labels.weekly],['month',labels.monthly],['year',labels.yearly]]
 
-  const Drop=({open,setOpen,label,children}:{open:boolean;setOpen:(v:boolean)=>void;label:ReactNode;children:ReactNode})=><div className="relative"><button type="button" onClick={()=>setOpen(!open)} className="flex h-10 min-w-[150px] items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm dark:border-[#24365f] dark:bg-[#111a2c]"><span className="truncate">{label}</span><span className="text-slate-400">⌄</span></button>{open&&<><button className="fixed inset-0 z-30 cursor-default" onClick={()=>setOpen(false)}/><div className="absolute end-0 top-11 z-40 min-w-full overflow-hidden rounded-lg border border-slate-200 bg-white p-1 shadow-xl dark:border-[#24365f] dark:bg-[#111a2c]">{children}</div></>}</div>
+  const Drop=({open,setOpen,label,children}:{open:boolean;setOpen:(v:boolean)=>void;label:ReactNode;children:ReactNode})=><div className="relative"><button type="button" onClick={()=>setOpen(!open)} className="flex h-10 min-w-[150px] items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm transition hover:border-amber-400 focus:border-[#172a57] focus:outline-none focus:ring-2 focus:ring-[#172a57]/15 dark:border-[#24365f] dark:bg-[#111a2c] dark:focus:border-amber-500 dark:focus:ring-amber-500/20"><span className="truncate">{label}</span><span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-slate-50 text-slate-500 transition dark:bg-white/10 dark:text-slate-200"><ChevronDown size={15} className={`transition-transform ${open?'rotate-180':''}`}/></span></button>{open&&<><button className="fixed inset-0 z-30 cursor-default" onClick={()=>setOpen(false)}/><div className="absolute end-0 top-11 z-40 min-w-full overflow-hidden rounded-lg border border-slate-200 bg-white p-1 shadow-xl dark:border-[#24365f] dark:bg-[#111a2c]">{children}</div></>}</div>
 
   return <div className="w-full pb-8" dir={isRtl?'rtl':'ltr'}>
     <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
@@ -970,8 +1109,8 @@ function DetailDropdown<T extends string>({ value, onChange, options, className=
   const [open,setOpen]=useState(false)
   const current=options.find(([key])=>key===value)?.[1] || ''
   return <div className={`relative ${className}`}>
-    <button type="button" onClick={()=>setOpen(v=>!v)} className="flex h-10 w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 text-sm shadow-sm transition hover:border-amber-400 dark:border-[#24365f] dark:bg-[#0c1424]">
-      <span>{current}</span><span className="text-slate-400">⌄</span>
+    <button type="button" onClick={()=>setOpen(v=>!v)} className="flex h-10 w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 text-sm shadow-sm transition hover:border-amber-400 focus:border-[#172a57] focus:outline-none focus:ring-2 focus:ring-[#172a57]/15 dark:border-[#24365f] dark:bg-[#0c1424] dark:focus:border-amber-500 dark:focus:ring-amber-500/20">
+      <span className="truncate">{current}</span><span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-slate-50 text-slate-500 transition dark:bg-white/10 dark:text-slate-200"><ChevronDown size={15} className={`transition-transform ${open?'rotate-180':''}`}/></span>
     </button>
     {open&&<div className="absolute end-0 top-11 z-40 min-w-full overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-[#24365f] dark:bg-[#101827]">
       {options.map(([key,label])=><button key={key} type="button" onClick={()=>{onChange(key);setOpen(false)}} className={`flex w-full items-center gap-2 whitespace-nowrap px-3 py-2 text-start text-sm hover:bg-slate-50 dark:hover:bg-white/5 ${value===key?'bg-amber-500 text-black':''}`}>
@@ -1009,13 +1148,13 @@ function DashboardDetailPage({ view, language, onBack, onNavigate }: { view:Dash
     return()=>{window.removeEventListener('pharma:data-changed',refresh);window.removeEventListener('cash-wallet-updated',refresh);window.removeEventListener('storage',refresh)}
   },[])
 
-  const invoices=readCollection('billingInvoices')
-  const expenses=readCollection('expenses')
+  const businessCurrencyFilter=localStorage.getItem('isp-primary-currency')||'all'
+  const invoices=readCollection('billingInvoices').filter((row:any)=>currencyMatches(row.currency,businessCurrencyFilter))
+  const expenses=readCollection('expenses').filter((row:any)=>currencyMatches(row.currency,businessCurrencyFilter))
   const customers=readCollection('customers')
   const suppliers=readCollection('suppliers')
-  const supplierPurchases=readCollection('supplierPurchases')
-  const godownEntries=readCollection('godownEntries')
-  const products=readCollection('products')
+  const godownEntries=readCollection('godownEntries').filter((row:any)=>currencyMatches(row.currency,businessCurrencyFilter))
+  const products=readCollection('products').filter((row:any)=>currencyMatches(row.currency,businessCurrencyFilter))
   const q=query.trim().toLowerCase()
   const hit=(...values:unknown[])=>!q||values.some(v=>String(v??'').toLowerCase().includes(q))
   const rangeOpts:Array<[DetailRange,string]>=[['all','All Time'],['today','Today'],['week','Weekly'],['month','Monthly'],['year','Annual']]
@@ -1023,18 +1162,16 @@ function DashboardDetailPage({ view, language, onBack, onNavigate }: { view:Dash
     const symbol=currency==='USD'?'$':currency==='EUR'?'€':currency==='GBP'?'£':currency==='AFN'?'؋':currency
     return `${Number(value||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} ${symbol}`
   }
+  const totalByCurrency=(rows:any[], amount:(row:any)=>number, currency:(row:any)=>unknown=(row)=>row.currency||'AFN')=>{
+    const totals: Record<string, number> = {}
+    rows.forEach((row:any)=>addCurrencyAmount(totals,currency(row),amount(row)))
+    return formatCurrencyTotals(totals)
+  }
 
-  const supplierAdjustments=godownEntries.flatMap((entry:any)=>Array.isArray(entry.adjustments)?entry.adjustments.map((a:any)=>({...a,supplierId:a.supplierId||entry.supplierId})):[])
-  const supplierRows=suppliers.map((supplier:any)=>{
-    const opening=num(supplier.openingBalance??supplier.balance)
-    const purchases=supplierPurchases.filter((p:any)=>String(p.supplierId||'')===String(supplier.id||'')||p.supplierName===supplier.name)
-    const purchaseRemain=purchases.reduce((sum:number,p:any)=>sum+num(p.totalPurchaseValue??p.total??p.amount)-num(p.paidAmount??p.paid),0)
-    const adjustments=supplierAdjustments.filter((a:any)=>String(a.supplierId||'')===String(supplier.id||'')).reduce((sum:number,a:any)=>sum+(String(a.type).toLowerCase()==='credit'?-num(a.amount):num(a.amount)),0)
-    return {...supplier,balanceCalc:opening+purchaseRemain+adjustments}
-  })
+  const supplierRows=supplierBalanceRows(suppliers,godownEntries)
 
   if(view==='sales'){
-    const rows=invoices.filter((x:any)=>detailRangeMatches(x,range)).filter((x:any)=>{
+    const rows=newestFirst(invoices.filter((x:any)=>detailRangeMatches(x,range)).filter((x:any)=>{
       const remaining=num(x.balance??x.remaining)
       const paid=num(x.paidAmount??x.paid)
       const total=num(x.total)
@@ -1042,13 +1179,13 @@ function DashboardDetailPage({ view, language, onBack, onNavigate }: { view:Dash
       if(status==='partial') return paid>0 && remaining>0
       if(status==='loan') return paid<=0 && remaining>0
       return true
-    }).filter((x:any)=>hit(x.invoiceNo,x.invoiceNumber,x.customerName,x.customer,x.total))
+    }).filter((x:any)=>hit(x.invoiceNo,x.invoiceNumber,x.customerName,x.customer,x.total)))
     const allRows=invoices.filter((x:any)=>detailRangeMatches(x,range))
-    const total=allRows.reduce((s:number,x:any)=>s+num(x.total),0)
+    const total=totalByCurrency(allRows,(x:any)=>num(x.total))
     const paidCount=allRows.filter((x:any)=>num(x.balance??x.remaining)<=0).length
     return <div dir={isRtl?'rtl':'ltr'}>
       <DetailHeader title="Sales View" sub="All sales" onBack={onBack}/>
-      <div className="grid gap-3 lg:grid-cols-3"><StatCard title="All Sales" value={String(allRows.length)} icon={ShoppingCart} accent="blue"/><StatCard title="Total" value={fmt(total)} icon={ShoppingCart} accent="green"/><StatCard title="Paid" value={String(paidCount)} icon={ShoppingCart} accent="navy"/></div>
+      <div className="grid gap-3 lg:grid-cols-3"><StatCard title="All Sales" value={String(allRows.length)} icon={ShoppingCart} accent="blue"/><StatCard title="Total" value={total} icon={ShoppingCart} accent="green"/><StatCard title="Paid" value={String(paidCount)} icon={ShoppingCart} accent="navy"/></div>
       <div className="mt-5 flex gap-3 rounded-xl border border-slate-200 bg-white p-4"><div className="relative flex-1"><Search size={16} className="absolute start-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search..." className="h-10 w-full rounded-lg border border-slate-200 bg-white ps-9 pe-3 text-sm outline-none"/></div><DetailDropdown value={range} onChange={setRange} options={rangeOpts} className="w-[140px]"/><DetailDropdown value={status} onChange={setStatus} options={[['all','All Statuses'],['paid','Paid'],['partial','Loan / Partially'],['loan','Loan / Credit']]} className="w-[150px]"/></div>
       <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5"><div className="mb-3 flex items-center gap-2 font-semibold"><ShoppingCart size={17}/>Sales ({rows.length})</div><div className="overflow-visible"><table className="w-full text-sm"><thead><tr className="border-b border-slate-200 text-slate-500"><th className="px-3 py-3 text-start">Invoice</th><th className="px-3 py-3 text-start">Customer</th><th className="px-3 py-3 text-end">Total</th><th className="px-3 py-3 text-start">Status</th><th className="px-3 py-3 text-start">Date</th><th className="w-12"></th></tr></thead><tbody>{rows.map((x:any)=>{const remaining=num(x.balance??x.remaining);const paid=num(x.paidAmount??x.paid);const rowStatus=remaining<=0?'Paid':paid>0?'Partial':'Loan';return <tr key={x.id} className="border-b border-slate-100 last:border-0"><td className="px-3 py-4 font-mono font-semibold">{x.invoiceNo||x.invoiceNumber||x.id}</td><td className="px-3 py-4">{x.customerName||x.customer||'Walk-in Customer'}</td><td className="px-3 py-4 text-end">{fmt(num(x.total),x.currency||'AFN')}</td><td className="px-3 py-4"><span className={`rounded-full px-2 py-1 text-xs ${rowStatus==='Paid'?'bg-emerald-50 text-emerald-600':'bg-amber-50 text-amber-600'}`}>{rowStatus}</span></td><td className="px-3 py-4">{detailDate(x.date||x.createdAt)}</td><td className="relative px-3 py-4 text-end"><button onClick={()=>setMenuId(menuId===String(x.id)?null:String(x.id))}><MoreHorizontal size={17}/></button>{menuId===String(x.id)&&<div className="absolute end-0 top-11 z-30 w-28 rounded-lg border border-slate-200 bg-white p-1 shadow-xl"><button onClick={()=>onNavigate('sales')} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-slate-50"><Search size={14}/>View</button></div>}</td></tr>})}</tbody></table></div></section>
     </div>
@@ -1057,34 +1194,34 @@ function DashboardDetailPage({ view, language, onBack, onNavigate }: { view:Dash
   if(view==='expenses'){
     const cats=Array.from(new Set(expenses.map((x:any)=>String(x.category||'Miscellaneous'))))
     const methods=Array.from(new Set(expenses.map((x:any)=>String(x.paymentMethod||x.method||'Cash'))))
-    const rows=expenses.filter((x:any)=>detailRangeMatches(x,range)).filter((x:any)=>category==='all'||String(x.category||'Miscellaneous')===category).filter((x:any)=>method==='all'||String(x.paymentMethod||x.method||'Cash')===method).filter((x:any)=>hit(x.description,x.notes,x.category,x.amount))
-    const total=rows.reduce((s:number,x:any)=>s+num(x.amountBase??x.amount??x.total),0)
-    const now=new Date(); const monthly=expenses.filter((x:any)=>{const d=recordDate(x);return d&&d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear()}).reduce((s:number,x:any)=>s+num(x.amountBase??x.amount??x.total),0)
+    const rows=newestFirst(expenses.filter((x:any)=>detailRangeMatches(x,range)).filter((x:any)=>category==='all'||String(x.category||'Miscellaneous')===category).filter((x:any)=>method==='all'||String(x.paymentMethod||x.method||'Cash')===method).filter((x:any)=>hit(x.description,x.notes,x.category,x.amount)))
+    const total=totalByCurrency(rows,(x:any)=>num(x.amountBase??x.amount??x.total))
+    const now=new Date(); const monthly=totalByCurrency(expenses.filter((x:any)=>{const d=recordDate(x);return d&&d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear()}),(x:any)=>num(x.amountBase??x.amount??x.total))
     return <div dir={isRtl?'rtl':'ltr'}><DetailHeader title="Expenses View" sub="All expenses" onBack={onBack}/>
-      <div className="grid gap-3 lg:grid-cols-3"><StatCard title="Total Expenses" value={fmt(total)} icon={WalletCards} accent="red"/><StatCard title="Monthly" value={fmt(monthly)} icon={WalletCards} accent="orange"/><StatCard title="Records" value={String(rows.length)} icon={WalletCards} accent="blue"/></div>
+      <div className="grid gap-3 lg:grid-cols-3"><StatCard title="Total Expenses" value={total} icon={WalletCards} accent="red"/><StatCard title="Monthly" value={monthly} icon={WalletCards} accent="orange"/><StatCard title="Records" value={String(rows.length)} icon={WalletCards} accent="blue"/></div>
       <div className="mt-5 flex gap-3 rounded-xl border border-slate-200 bg-white p-4"><div className="relative flex-1"><Search size={16} className="absolute start-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search..." className="h-10 w-full rounded-lg border border-slate-200 ps-9 pe-3 text-sm"/></div><DetailDropdown value={range} onChange={setRange} options={rangeOpts} className="w-[130px]"/><DetailDropdown value={category} onChange={setCategory} options={[['all','All Categories'],...cats.map(c=>[c,c] as [string,string])]} className="w-[145px]"/><DetailDropdown value={method} onChange={setMethod} options={[['all','All Methods'],...methods.map(m=>[m,m] as [string,string])]} className="w-[135px]"/></div>
       <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5"><div className="mb-3 flex items-center gap-2 font-semibold"><WalletCards size={17}/>Expenses ({rows.length})</div><table className="w-full text-sm"><thead><tr className="border-b border-slate-200 text-slate-500"><th className="px-3 py-3 text-start">Category</th><th className="px-3 py-3 text-start">Notes</th><th className="px-3 py-3 text-end">Amount</th><th className="px-3 py-3 text-start">Payment Method</th><th className="px-3 py-3 text-start">Date</th></tr></thead><tbody>{rows.map((x:any)=><tr key={x.id} className="border-b border-slate-100 last:border-0"><td className="px-3 py-4"><span className="rounded-full bg-slate-100 px-2 py-1 text-xs">{x.category||'Miscellaneous'}</span></td><td className="px-3 py-4">{x.description||x.notes||x.title||'—'}</td><td className="px-3 py-4 text-end text-red-500">−{fmt(num(x.amountBase??x.amount??x.total),x.currency||'AFN')}</td><td className="px-3 py-4">{x.paymentMethod||x.method||'Cash'}</td><td className="px-3 py-4">{detailDate(x.date||x.createdAt)}</td></tr>)}</tbody></table></section>
     </div>
   }
 
   if(view==='loans'){
-    const rows=invoices.filter((x:any)=>detailRangeMatches(x,range)&&num(x.balance??x.remaining)>0).filter((x:any)=>hit(x.invoiceNo,x.customerName,x.total,x.balance))
-    const remaining=rows.reduce((s:number,x:any)=>s+num(x.balance??x.remaining),0)
-    const total=rows.reduce((s:number,x:any)=>s+num(x.total),0)
+    const rows=newestFirst(invoices.filter((x:any)=>detailRangeMatches(x,range)&&num(x.balance??x.remaining)>0).filter((x:any)=>hit(x.invoiceNo,x.customerName,x.total,x.balance)))
+    const remaining=totalByCurrency(rows,(x:any)=>num(x.balance??x.remaining))
+    const total=totalByCurrency(rows,(x:any)=>num(x.total))
     return <div dir={isRtl?'rtl':'ltr'}><DetailHeader title="Loan / Partially View" sub="Loan / Partially sales" onBack={onBack}/>
-      <div className="grid gap-3 lg:grid-cols-3"><StatCard title="Loan / Partially" value={fmt(remaining)} icon={Clock3} accent="orange"/><StatCard title="Records" value={String(rows.length)} icon={Clock3} accent="blue"/><StatCard title="Total" value={fmt(total)} icon={Clock3} accent="navy"/></div>
+      <div className="grid gap-3 lg:grid-cols-3"><StatCard title="Loan / Partially" value={remaining} icon={Clock3} accent="orange"/><StatCard title="Records" value={String(rows.length)} icon={Clock3} accent="blue"/><StatCard title="Total" value={total} icon={Clock3} accent="navy"/></div>
       <div className="mt-5 flex gap-3 rounded-xl border border-slate-200 bg-white p-4"><div className="relative flex-1"><Search size={16} className="absolute start-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search..." className="h-10 w-full rounded-lg border border-slate-200 ps-9 pe-3 text-sm"/></div><DetailDropdown value={range} onChange={setRange} options={rangeOpts} className="w-[140px]"/></div>
       <section className="mt-5 min-h-[230px] rounded-xl border border-slate-200 bg-white p-5"><div className="mb-3 flex items-center gap-2 font-semibold"><Clock3 size={17}/>Loan / Partially ({rows.length})</div>{rows.length?<table className="w-full text-sm"><thead><tr className="border-b border-slate-200 text-slate-500"><th className="px-3 py-3 text-start">Invoice</th><th className="px-3 py-3 text-start">Customer</th><th className="px-3 py-3 text-end">Total</th><th className="px-3 py-3 text-end">Paid</th><th className="px-3 py-3 text-end">Remaining</th><th className="px-3 py-3 text-start">Date</th></tr></thead><tbody>{rows.map((x:any)=><tr key={x.id} className="border-b border-slate-100 last:border-0"><td className="px-3 py-4 font-mono font-semibold">{x.invoiceNo||x.invoiceNumber||x.id}</td><td className="px-3 py-4">{x.customerName||x.customer||'Walk-in Customer'}</td><td className="px-3 py-4 text-end">{fmt(num(x.total),x.currency||'AFN')}</td><td className="px-3 py-4 text-end text-emerald-500">{fmt(num(x.paidAmount??x.paid),x.currency||'AFN')}</td><td className="px-3 py-4 text-end text-red-500">{fmt(num(x.balance??x.remaining),x.currency||'AFN')}</td><td className="px-3 py-4">{detailDate(x.date||x.createdAt)}</td></tr>)}</tbody></table>:<div className="grid h-[170px] place-items-center text-center"><div><Clock3 size={44} className="mx-auto text-slate-300"/><div className="mt-3 font-semibold">No results found</div></div></div>}</section>
     </div>
   }
 
   if(view==='refunds'){
-    const refundRows=invoices.flatMap((inv:any)=>(Array.isArray(inv.refundHistory)?inv.refundHistory:[]).map((r:any)=>({...r,invoice:inv}))).filter((x:any)=>detailRangeMatches(x,range)).filter((x:any)=>hit(x.invoice?.invoiceNo,x.invoice?.customerName,x.amount,x.reason,x.note))
-    const total=refundRows.reduce((s:number,x:any)=>s+num(x.amount),0)
+    const refundRows=newestFirst(invoices.flatMap((inv:any)=>(Array.isArray(inv.refundHistory)?inv.refundHistory:[]).map((r:any)=>({...r,invoice:inv}))).filter((x:any)=>detailRangeMatches(x,range)).filter((x:any)=>hit(x.invoice?.invoiceNo,x.invoice?.customerName,x.amount,x.reason,x.note)))
+    const total=totalByCurrency(refundRows,(x:any)=>num(x.amount),(x:any)=>x.currency||x.invoice?.currency||'AFN')
     const refundedInvoiceIds=new Set(refundRows.map((x:any)=>String(x.invoice?.id)))
-    const refundCogs=invoices.filter((inv:any)=>refundedInvoiceIds.has(String(inv.id))).reduce((s:number,inv:any)=>s+invoiceRefundCostValue(inv,products),0)
+    const refundCogs=totalByCurrency(invoices.filter((inv:any)=>refundedInvoiceIds.has(String(inv.id))),(inv:any)=>invoiceRefundCostValue(inv,products))
     return <div dir={isRtl?'rtl':'ltr'}><DetailHeader title="Total Refundables" sub="Process Refund" onBack={onBack} printLabel="Print"/>
-      <div className="grid gap-3 lg:grid-cols-3"><StatCard title="Total Refundables" value={fmt(total)} icon={RefreshCcw} accent="red"/><StatCard title="Records" value={String(refundRows.length)} icon={RefreshCcw} accent="navy"/><StatCard title="Cost of Goods Sold (Purchase Price × Qty Sold)" value={fmt(refundCogs)} icon={RefreshCcw} accent="orange"/></div>
+      <div className="grid gap-3 lg:grid-cols-3"><StatCard title="Total Refundables" value={total} icon={RefreshCcw} accent="red"/><StatCard title="Records" value={String(refundRows.length)} icon={RefreshCcw} accent="navy"/><StatCard title="Cost of Goods Sold (Purchase Price × Qty Sold)" value={refundCogs} icon={RefreshCcw} accent="orange"/></div>
       <div className="mt-5 flex gap-3 rounded-xl border border-slate-200 bg-white p-4"><div className="relative flex-1"><Search size={16} className="absolute start-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search..." className="h-10 w-full rounded-lg border border-slate-200 ps-9 pe-3 text-sm"/></div><DetailDropdown value={range} onChange={setRange} options={rangeOpts} className="w-[140px]"/></div>
       <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5"><div className="mb-3 flex items-center gap-2 font-semibold"><RefreshCcw size={17}/>Process Refund ({refundRows.length})</div><table className="w-full text-sm"><thead><tr className="border-b border-slate-200 text-slate-500"><th className="px-3 py-3 text-start">Invoice</th><th className="px-3 py-3 text-start">Customer</th><th className="px-3 py-3 text-end">Qty</th><th className="px-3 py-3 text-end">Total Refund Amount</th><th className="px-3 py-3 text-start">Reason for Refund</th><th className="px-3 py-3 text-start">Date</th></tr></thead><tbody>{refundRows.map((x:any,i:number)=><tr key={`${x.invoice?.id}-${x.id||i}`} className="border-b border-slate-100 last:border-0"><td className="px-3 py-4 font-mono font-semibold">{x.invoice?.invoiceNo||x.invoice?.invoiceNumber||x.invoice?.id}</td><td className="px-3 py-4">{x.invoice?.customerName||x.invoice?.customer||'Walk-in Customer'}</td><td className="px-3 py-4 text-end">{num(x.quantity??x.qty??x.refundQuantity??0)||'—'}</td><td className="px-3 py-4 text-end text-red-500">{fmt(num(x.amount),x.currency||x.invoice?.currency||'AFN')}</td><td className="px-3 py-4">{x.reason||x.note||'—'}</td><td className="px-3 py-4">{detailDate(x.date||x.createdAt||x.invoice?.updatedAt)}</td></tr>)}</tbody></table></section>
     </div>
@@ -1156,14 +1293,14 @@ function DashboardDetailPage({ view, language, onBack, onNavigate }: { view:Dash
       return (!lowOnly||low) && hit(p.code,p.barcode,p.name,p.brandName,p.category)
     })
     const totalQty=products.reduce((s:number,p:any)=>s+Math.max(0,num(p.quantity??p.stock??p.qty)),0)
-    const amount=products.reduce((s:number,p:any)=>s+Math.max(0,num(p.quantity??p.stock??p.qty))*Math.max(0,num(p.purchase??p.purchasePrice??p.cost)),0)
+    const amount=totalByCurrency(products,(p:any)=>Math.max(0,num(p.quantity??p.stock??p.qty))*Math.max(0,num(p.purchase??p.purchasePrice??p.cost)))
     const lowCount=products.filter((p:any)=>{const q=Math.max(0,num(p.quantity??p.stock??p.qty));const t=Math.max(0,num(p.lowStock??p.lowStockThreshold??p.minimumStock));return q>0&&t>0&&q<=t}).length
     const outCount=products.filter((p:any)=>num(p.quantity??p.stock??p.qty)<=0).length
     return <div dir={isRtl?'rtl':'ltr'}>
       <DetailHeader title="Stock View" sub="Medicines" onBack={onBack}/>
       <div className="grid gap-3 lg:grid-cols-4">
         <StatCard title="Total" value={String(totalQty)} icon={Package} accent="blue"/>
-        <StatCard title="Amount" value={fmt(amount)} icon={Package} accent="green"/>
+        <StatCard title="Amount" value={amount} icon={Package} accent="green"/>
         <StatCard title="Low Stock" value={String(lowCount)} icon={Package} accent="orange"/>
         <StatCard title="Out of Stock" value={String(outCount)} icon={Package} accent="red"/>
       </div>
@@ -1183,13 +1320,15 @@ function DashboardDetailPage({ view, language, onBack, onNavigate }: { view:Dash
     const staff=readCollection('staff')
     const histories=staff.flatMap((s:any)=>(Array.isArray(s.payrollHistory)?s.payrollHistory:[]).map((p:any)=>({...p,staff:s}))).filter((p:any)=>detailRangeMatches(p,range)).filter((p:any)=>hit(p.staff?.name,p.period,p.start,p.end,p.paidAmount,p.payable))
     const activeStaff=staff.filter((s:any)=>String(s.status||'active').toLowerCase()!=='inactive').length
-    const paid=histories.reduce((sum:number,p:any)=>sum+num(p.paidAmountBase??p.paidAmount??p.amount),0)
-    const payable=staff.reduce((sum:number,s:any)=>{
+    const paid=totalByCurrency(histories,(p:any)=>num(p.paidAmountBase??p.paidAmount??p.amount),(p:any)=>p.currency||p.staff?.currency||'AFN')
+    const payableTotals: Record<string, number> = {}
+    staff.forEach((s:any)=>{
       const h=Array.isArray(s.payrollHistory)?s.payrollHistory:[]
-      const latest=new Map<string,number>()
-      h.forEach((p:any)=>latest.set(`${p.start||''}_${p.end||''}_${p.currency||s.currency||'AFN'}`,num(p.payable)))
-      return sum+[...latest.values()].reduce((a,b)=>a+b,0)
-    },0)
+      const latest=new Map<string,{currency:string;amount:number}>()
+      h.forEach((p:any)=>latest.set(`${p.start||''}_${p.end||''}_${p.currency||s.currency||'AFN'}`,{currency:p.currency||s.currency||'AFN',amount:num(p.payable)}))
+      latest.forEach(({currency,amount})=>addCurrencyAmount(payableTotals,currency,amount))
+    })
+    const payable=formatCurrencyTotals(payableTotals)
     return <div dir={isRtl?'rtl':'ltr'}>
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <DetailHeader title="Staff Payroll" sub="Staff members and salary breakdown" onBack={onBack} printLabel="Print Report"/>
@@ -1198,8 +1337,8 @@ function DashboardDetailPage({ view, language, onBack, onNavigate }: { view:Dash
       <div className="grid gap-3 lg:grid-cols-4">
         <StatCard title="Total Staff" value={String(staff.length)} icon={Users} accent="blue"/>
         <StatCard title="Active Staff" value={String(activeStaff)} icon={Users} accent="green"/>
-        <StatCard title="Staff Payable" value={fmt(payable)} icon={WalletCards} accent="orange"/>
-        <StatCard title="Staff Paid" value={fmt(paid)} icon={CircleDollarSign} accent="green"/>
+        <StatCard title="Staff Payable" value={payable} icon={WalletCards} accent="orange"/>
+        <StatCard title="Staff Paid" value={paid} icon={CircleDollarSign} accent="green"/>
       </div>
       <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5">
         <div className="mb-3 flex items-center gap-2 font-semibold"><WalletCards size={17}/>Payroll History ({histories.length})</div>
@@ -1211,9 +1350,9 @@ function DashboardDetailPage({ view, language, onBack, onNavigate }: { view:Dash
 
   const payable=view==='supplier-payables'
   const rows=supplierRows.filter((s:any)=>payable?s.balanceCalc>0:s.balanceCalc<0).filter((s:any)=>hit(s.name,s.phone,s.balanceCalc)).filter((s:any)=>detailRangeMatches(s,range))
-  const total=rows.reduce((sum:number,s:any)=>sum+Math.abs(num(s.balanceCalc)),0)
+  const total=totalByCurrency(rows,(s:any)=>Math.abs(num(s.balanceCalc)))
   return <div dir={isRtl?'rtl':'ltr'}><DetailHeader title={payable?'Supplier Payables':'Supplier Receivables'} sub={payable?'Suppliers you owe money to':'Suppliers who owe money to you'} onBack={onBack} printLabel="Print"/>
-    <div className="grid max-w-[760px] gap-3 md:grid-cols-2"><StatCard title={payable?'Payable Suppliers':'Receivable Suppliers'} value={String(rows.length)} icon={TrendingUp} accent={payable?'red':'green'}/><StatCard title={payable?'Total Payables':'Total Receivables'} value={fmt(total)} icon={TrendingUp} accent={payable?'orange':'blue'}/></div>
+    <div className="grid max-w-[760px] gap-3 md:grid-cols-2"><StatCard title={payable?'Payable Suppliers':'Receivable Suppliers'} value={String(rows.length)} icon={TrendingUp} accent={payable?'red':'green'}/><StatCard title={payable?'Total Payables':'Total Receivables'} value={total} icon={TrendingUp} accent={payable?'orange':'blue'}/></div>
     <div className="mt-5 flex gap-3 rounded-xl border border-slate-200 bg-white p-4"><div className="relative flex-1"><Search size={16} className="absolute start-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search suppliers..." className="h-10 w-full rounded-lg border border-slate-200 ps-9 pe-3 text-sm"/></div><DetailDropdown value={range} onChange={setRange} options={rangeOpts} className="w-[140px]"/></div>
     <section className="mt-5 min-h-[220px] rounded-xl border border-slate-200 bg-white p-5"><div className="mb-3 flex items-center gap-2 font-semibold"><TrendingUp size={17}/>{payable?'Supplier Payables':'Supplier Receivables'} ({rows.length})</div>{rows.length?<table className="w-full text-sm"><thead><tr className="border-b border-slate-200 text-slate-500"><th className="px-3 py-3 text-start">Name</th><th className="px-3 py-3 text-start">Phone</th><th className="px-3 py-3 text-start">Currency</th><th className="px-3 py-3 text-end">{payable?'Payable Amount':'Receivable Amount'}</th><th className="px-3 py-3 text-start">Status</th><th className="px-3 py-3 text-start">Since</th><th className="w-12"></th></tr></thead><tbody>{rows.map((s:any)=><tr key={s.id} className="border-b border-slate-100 last:border-0"><td className="px-3 py-4">{s.name||'—'}</td><td className="px-3 py-4">{s.phone||'—'}</td><td className="px-3 py-4">{s.currency||'AFN'}</td><td className={`px-3 py-4 text-end font-semibold ${payable?'text-red-500':'text-emerald-500'}`}>{fmt(Math.abs(num(s.balanceCalc)),s.currency||'AFN')}</td><td className="px-3 py-4"><span className={`rounded-full px-2.5 py-1 text-xs text-white ${payable?'bg-red-500':'bg-emerald-500'}`}>{payable?'Payable':'Receivable'}</span></td><td className="px-3 py-4">{detailDate(s.createdAt||s.date)}</td><td className="relative px-3 py-4 text-end"><button onClick={()=>setMenuId(menuId===String(s.id)?null:String(s.id))}><MoreHorizontal size={17}/></button>{menuId===String(s.id)&&<div className="absolute end-0 top-11 z-30 w-36 rounded-lg border border-slate-200 bg-white p-1 shadow-xl"><button onClick={()=>onNavigate('suppliers')} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-slate-50"><Search size={14}/>View</button>{payable&&<button onClick={()=>onNavigate('suppliers')} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-slate-50"><WalletCards size={14}/>Make Payment</button>}</div>}</td></tr>)}</tbody></table>:<div className="grid h-[160px] place-items-center text-center"><div><TrendingUp size={44} className="mx-auto text-slate-300"/><div className="mt-3 font-semibold">No results found</div></div></div>}</section>
   </div>

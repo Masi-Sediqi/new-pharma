@@ -83,6 +83,17 @@ const money = (value: number, currency = 'AFN') => {
   const found = currencies.find(([code]) => code === currency)
   return `${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${found?.[1] ?? currency}`
 }
+const addCurrency = (totals: Record<string, number>, currency: unknown, amount: number) => {
+  const code = String(currency || 'AFN').toUpperCase()
+  totals[code] = (totals[code] || 0) + roundSupplierMoney(amount)
+}
+const multiMoney = (totals: Record<string, number>, fallback = 'AFN') => {
+  const entries = Object.entries(totals).filter(([, amount]) => Math.abs(roundSupplierMoney(amount)) > 0.000001)
+  if (!entries.length) return money(0, fallback)
+  const order = currencies.map(([code]) => code)
+  entries.sort(([a], [b]) => (order.indexOf(a as any) < 0 ? 999 : order.indexOf(a as any)) - (order.indexOf(b as any) < 0 ? 999 : order.indexOf(b as any)) || a.localeCompare(b))
+  return entries.map(([currency, amount]) => money(amount, currency)).join('\n')
+}
 
 export default function Suppliers({ language, onOpenSupplier, globalSearch = '' }: { language: Language, onOpenSupplier?: (supplierId: string) => void, globalSearch?: string }) {
   const t = supplierText[language]
@@ -124,16 +135,16 @@ export default function Suppliers({ language, onOpenSupplier, globalSearch = '' 
     (entry.adjustments || []).map((item) => ({ ...item, supplierId: item.supplierId || entry.supplierId || '' })),
   ), [godownEntries])
 
-  const rows = useMemo(() => suppliers.map((supplier) => {
+  const rows = useMemo(() => suppliers.flatMap((supplier) => {
     const entries = supplierRows.filter((row) => String(row.supplierId) === String(supplier.id))
     const supplierAdjustments = adjustments.filter((row) => String(row.supplierId) === String(supplier.id))
     const summary = calculateSupplierSummaryByCurrency({ supplier, entries, adjustments: supplierAdjustments, baseCurrency: supplier.currency })
-    const currencySummary = summary[supplier.currency] || Object.values(summary)[0]
-    return {
+    return Object.values(summary).map((currencySummary) => ({
       supplier,
+      currency: currencySummary.currency || supplier.currency || 'AFN',
       remaining: roundSupplierMoney(currencySummary?.remaining || 0),
       profit: roundSupplierMoney(currencySummary?.profit || 0),
-    }
+    }))
   }), [adjustments, supplierRows, suppliers])
 
   const filtered = useMemo(() => rows.filter(({ supplier, remaining }) => {
@@ -148,10 +159,15 @@ export default function Suppliers({ language, onOpenSupplier, globalSearch = '' 
   }), [balanceFilter, rows, search])
 
   const totals = useMemo(() => rows.reduce((acc, row) => {
-    if (row.remaining > 0) acc.payable += row.remaining
-    if (row.remaining < 0) acc.receivable += Math.abs(row.remaining)
+    if (row.remaining > 0) addCurrency(acc.payable, row.currency, row.remaining)
+    if (row.remaining < 0) addCurrency(acc.receivable, row.currency, Math.abs(row.remaining))
     return acc
-  }, { payable: 0, receivable: 0 }), [rows])
+  }, { payable: {} as Record<string, number>, receivable: {} as Record<string, number> }), [rows])
+  const netTotals = useMemo(() => {
+    const net: Record<string, number> = {}
+    Object.keys({ ...totals.payable, ...totals.receivable }).forEach((currency) => addCurrency(net, currency, (totals.payable[currency] || 0) - (totals.receivable[currency] || 0)))
+    return net
+  }, [totals])
 
   const openCreate = () => {
     setEditingId(null)
@@ -229,9 +245,9 @@ export default function Suppliers({ language, onOpenSupplier, globalSearch = '' 
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard icon={Users} title={t.totalSuppliers} value={String(suppliers.length)} />
-        <SummaryCard icon={TrendingDown} title={t.totalPayable} value={money(totals.payable)} valueClass="text-red-500" />
-        <SummaryCard icon={TrendingUp} title={t.totalReceivable} value={money(totals.receivable)} valueClass="text-emerald-500" />
-        <SummaryCard icon={DollarSign} title={t.netBalance} value={money(totals.payable - totals.receivable)} />
+        <SummaryCard icon={TrendingDown} title={t.totalPayable} value={multiMoney(totals.payable)} valueClass="text-red-500" />
+        <SummaryCard icon={TrendingUp} title={t.totalReceivable} value={multiMoney(totals.receivable)} valueClass="text-emerald-500" />
+        <SummaryCard icon={DollarSign} title={t.netBalance} value={multiMoney(netTotals)} />
       </div>
 
       <div className="mt-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -269,12 +285,12 @@ export default function Suppliers({ language, onOpenSupplier, globalSearch = '' 
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-[#24365f]">
-              {filtered.map(({ supplier, remaining, profit }) => (
-                <tr key={supplier.id} onClick={() => onOpenSupplier?.(supplier.id)} className="cursor-pointer transition hover:bg-slate-50 dark:hover:bg-white/[0.03]">
+              {filtered.map(({ supplier, currency, remaining, profit }) => (
+                <tr key={`${supplier.id}-${currency}`} onClick={() => onOpenSupplier?.(supplier.id)} className="cursor-pointer transition hover:bg-slate-50 dark:hover:bg-white/[0.03]">
                   <Td><div className="font-semibold text-slate-900 dark:text-white">{supplier.name}</div><div className="mt-0.5 text-xs text-slate-400">{supplier.businessType || '—'}</div></Td>
-                  <Td>{supplier.phone || '—'}</Td><Td>{supplier.address || '—'}</Td><Td>{supplier.currency}</Td>
-                  <Td><span className={remaining > 0 ? 'font-bold text-red-500' : remaining < 0 ? 'font-bold text-emerald-500' : 'font-semibold'}>{money(Math.abs(remaining), supplier.currency)}</span></Td>
-                  <Td><StatusPill remaining={remaining} t={t} /></Td><Td>{money(profit, supplier.currency)}</Td>
+                  <Td>{supplier.phone || '—'}</Td><Td>{supplier.address || '—'}</Td><Td>{currency}</Td>
+                  <Td><span className={remaining > 0 ? 'font-bold text-red-500' : remaining < 0 ? 'font-bold text-emerald-500' : 'font-semibold'}>{money(Math.abs(remaining), currency)}</span></Td>
+                  <Td><StatusPill remaining={remaining} t={t} /></Td><Td>{money(profit, currency)}</Td>
                   <Td><div className="flex items-center gap-1"><button onClick={(e) => { e.stopPropagation(); openEdit(supplier) }} className="grid h-8 w-8 place-items-center rounded-md hover:bg-slate-100 dark:hover:bg-white/10" aria-label={t.edit}><Edit3 size={15} /></button><button onClick={(e) => { e.stopPropagation(); removeSupplier(supplier.id) }} className="grid h-8 w-8 place-items-center rounded-md text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10" aria-label={t.delete}><Trash2 size={15} /></button></div></Td>
                 </tr>
               ))}
@@ -308,16 +324,16 @@ export default function Suppliers({ language, onOpenSupplier, globalSearch = '' 
 }
 
 function SummaryCard({ icon: Icon, title, value, valueClass = '' }: { icon: typeof Truck, title: string, value: string, valueClass?: string }) {
-  return <div className="app-panel flex min-h-[100px] items-start justify-between rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-[#24365f] dark:bg-[#111a2c]"><div><div className="text-xs font-semibold text-slate-600 dark:text-slate-300">{title}</div><div className={`mt-2 text-2xl font-extrabold ${valueClass}`}>{value}</div></div><Icon size={18} className="mt-1 text-slate-500 dark:text-slate-300" /></div>
+  return <div className="app-panel flex min-h-[100px] items-start justify-between rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-[#24365f] dark:bg-[#111a2c]"><div><div className="text-xs font-semibold text-slate-600 dark:text-slate-300">{title}</div><div className={`mt-2 whitespace-pre-line text-2xl font-extrabold ${valueClass}`}>{value}</div></div><Icon size={18} className="mt-1 text-slate-500 dark:text-slate-300" /></div>
 }
 function Th({ children }: { children: React.ReactNode }) { return <th className="px-4 py-3 text-start text-xs font-bold">{children}</th> }
 function Td({ children }: { children: React.ReactNode }) { return <td className="px-4 py-3 text-slate-600 dark:text-slate-200">{children}</td> }
 function Field({ label, children }: { label: string, children: React.ReactNode }) { return <label className="block text-sm font-semibold"><span className="mb-1.5 block">{label}</span>{children}</label> }
 function StatusPill({ remaining, t }: { remaining: number, t: (typeof supplierText)[Language] }) { const label = remaining > 0 ? t.payable : remaining < 0 ? t.receivable : t.settled; const cls = remaining > 0 ? 'bg-red-50 text-red-600 dark:bg-red-500/10' : remaining < 0 ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10' : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'; return <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${cls}`}>{label}</span> }
 
-function PrintPreview({ language, suppliers, totals, onClose }: { language: Language, suppliers: Array<{ supplier: Supplier, remaining: number, profit: number }>, totals: { payable: number, receivable: number }, onClose: () => void }) {
+function PrintPreview({ language, suppliers, totals, onClose }: { language: Language, suppliers: Array<{ supplier: Supplier, currency: string, remaining: number, profit: number }>, totals: { payable: Record<string, number>, receivable: Record<string, number> }, onClose: () => void }) {
   const t = supplierText[language]
   const isRtl = language !== 'English'
-  return <div className="fixed inset-0 z-[80] overflow-y-auto bg-black/75 p-3 sm:p-6"><div className="mx-auto w-full max-w-5xl overflow-hidden rounded-xl bg-slate-100 shadow-2xl dark:bg-[#0c1424]"><div className="flex h-12 items-center gap-2 border-b border-slate-200 bg-white px-3 dark:border-[#24365f] dark:bg-[#101827]"><button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg hover:bg-slate-100 dark:hover:bg-white/10"><X size={17} /></button><button onClick={() => window.print()} className="inline-flex h-8 items-center gap-2 rounded-md bg-[#172a57] px-3 text-xs font-bold text-white dark:bg-amber-500 dark:text-slate-950"><Printer size={14} /> {t.print}</button><div className="ml-auto text-sm font-bold rtl:ml-0 rtl:mr-auto">{t.report}</div></div><div className="p-4 sm:p-8"><section dir={isRtl ? 'rtl' : 'ltr'} className="mx-auto min-h-[700px] max-w-[760px] bg-white p-8 text-slate-900 shadow-lg print:max-w-none print:shadow-none"><div className="border-b-4 border-teal-600 pb-5"><div className="text-2xl font-black">Pharma Pro</div><div className="text-xs text-slate-500">PHARMA MANAGEMENT SYSTEM</div></div><div className="mt-8"><div className="text-xs font-bold text-slate-500">REPORT</div><h2 className="mt-1 text-2xl font-black">{t.report}</h2><p className="mt-1 text-xs text-slate-500">{t.subtitle}</p></div><div className="mt-5 grid grid-cols-3 gap-2"><ReportBox label={t.totalSuppliers} value={String(suppliers.length)} /><ReportBox label={t.totalPayable} value={money(totals.payable)} /><ReportBox label={t.totalReceivable} value={money(totals.receivable)} /></div><div className="mt-5 overflow-hidden rounded border border-slate-200"><table className="w-full text-xs"><thead className="bg-slate-50"><tr><th className="p-2 text-start">{t.name}</th><th className="p-2 text-start">{t.phone}</th><th className="p-2 text-start">{t.balance}</th><th className="p-2 text-start">{t.status}</th></tr></thead><tbody>{suppliers.map(({supplier, remaining}) => <tr key={supplier.id} className="border-t"><td className="p-2">{supplier.name}</td><td className="p-2">{supplier.phone || '—'}</td><td className="p-2">{money(Math.abs(remaining), supplier.currency)}</td><td className="p-2">{remaining > 0 ? t.payable : remaining < 0 ? t.receivable : t.settled}</td></tr>)}{!suppliers.length && <tr><td colSpan={4} className="p-8 text-center text-slate-400">{t.noSuppliers}</td></tr>}</tbody></table></div></section></div></div></div>
+  return <div className="fixed inset-0 z-[80] overflow-y-auto bg-black/75 p-3 sm:p-6"><div className="mx-auto w-full max-w-5xl overflow-hidden rounded-xl bg-slate-100 shadow-2xl dark:bg-[#0c1424]"><div className="flex h-12 items-center gap-2 border-b border-slate-200 bg-white px-3 dark:border-[#24365f] dark:bg-[#101827]"><button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg hover:bg-slate-100 dark:hover:bg-white/10"><X size={17} /></button><button onClick={() => window.print()} className="inline-flex h-8 items-center gap-2 rounded-md bg-[#172a57] px-3 text-xs font-bold text-white dark:bg-amber-500 dark:text-slate-950"><Printer size={14} /> {t.print}</button><div className="ml-auto text-sm font-bold rtl:ml-0 rtl:mr-auto">{t.report}</div></div><div className="p-4 sm:p-8"><section dir={isRtl ? 'rtl' : 'ltr'} className="mx-auto min-h-[700px] max-w-[760px] bg-white p-8 text-slate-900 shadow-lg print:max-w-none print:shadow-none"><div className="border-b-4 border-teal-600 pb-5"><div className="text-2xl font-black">Pharma Pro</div><div className="text-xs text-slate-500">PHARMA MANAGEMENT SYSTEM</div></div><div className="mt-8"><div className="text-xs font-bold text-slate-500">REPORT</div><h2 className="mt-1 text-2xl font-black">{t.report}</h2><p className="mt-1 text-xs text-slate-500">{t.subtitle}</p></div><div className="mt-5 grid grid-cols-3 gap-2"><ReportBox label={t.totalSuppliers} value={String(suppliers.length)} /><ReportBox label={t.totalPayable} value={multiMoney(totals.payable)} /><ReportBox label={t.totalReceivable} value={multiMoney(totals.receivable)} /></div><div className="mt-5 overflow-hidden rounded border border-slate-200"><table className="w-full text-xs"><thead className="bg-slate-50"><tr><th className="p-2 text-start">{t.name}</th><th className="p-2 text-start">{t.phone}</th><th className="p-2 text-start">{t.balance}</th><th className="p-2 text-start">{t.status}</th></tr></thead><tbody>{suppliers.map(({supplier, currency, remaining}) => <tr key={`${supplier.id}-${currency}`} className="border-t"><td className="p-2">{supplier.name}</td><td className="p-2">{supplier.phone || '—'}</td><td className="p-2">{money(Math.abs(remaining), currency)}</td><td className="p-2">{remaining > 0 ? t.payable : remaining < 0 ? t.receivable : t.settled}</td></tr>)}{!suppliers.length && <tr><td colSpan={4} className="p-8 text-center text-slate-400">{t.noSuppliers}</td></tr>}</tbody></table></div></section></div></div></div>
 }
 function ReportBox({ label, value }: { label: string, value: string }) { return <div className="rounded border border-slate-300 p-3"><div className="text-[10px] text-slate-500">{label}</div><div className="mt-1 text-sm font-black">{value}</div></div> }

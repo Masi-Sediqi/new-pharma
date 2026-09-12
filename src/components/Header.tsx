@@ -599,7 +599,7 @@ export default function Header({ isRtl, language, onMenuClick, onLanguageChange,
                 </MenuPanel>
               )}
             </div>
-            <span className="rounded-md bg-amber-400 px-2 py-0.5 text-[10px] font-extrabold text-slate-950">ALL</span>
+            <span className="rounded-md bg-amber-400 px-2 py-0.5 text-[10px] font-extrabold text-slate-950">{primaryCurrency === 'all' ? 'ALL' : primaryCurrency}</span>
             <div className="relative">
               <IconButton label="Exchange currency" onClick={() => toggleMenu('exchange')}>
                 <SlidersHorizontal size={17} />

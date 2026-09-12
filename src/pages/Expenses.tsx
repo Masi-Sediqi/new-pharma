@@ -277,6 +277,11 @@ export default function Expenses({ language, globalSearch = '' }: { language: La
     method: row.method || 'Cash', notes: row.notes || row.description2 || '', date: String(row.date || row.createdAt || '').slice(0, 10),
     createdAt: row.createdAt || new Date().toISOString(), updatedAt: row.updatedAt || row.createdAt || new Date().toISOString()
   })), [rows, baseCurrency, version])
+  const rowTime = (expense: Expense) => {
+    const raw = [expense.createdAt, expense.updatedAt, expense.date].map((value) => value ? new Date(String(value)).getTime() : Number.NaN).filter(Number.isFinite) as number[]
+    const id = String(expense.id || '').match(/(\d{10,})/)
+    return Math.max(0, ...raw, id ? Number(id[1]) : 0)
+  }
 
   const filtered = useMemo(() => normalized.filter((expense) => {
     const needle = lower(search)
@@ -284,7 +289,7 @@ export default function Expenses({ language, globalSearch = '' }: { language: La
     const matchesCategory = category === 'all' || expense.category === category
     const matchesMethod = method === 'all' || expense.method === method
     return matchesSearch && matchesCategory && matchesMethod && dateMatches(expense.date, dateFilter, customFrom, customTo)
-  }), [normalized, search, category, method, dateFilter, customFrom, customTo])
+  }).sort((a, b) => rowTime(b) - rowTime(a)), [normalized, search, category, method, dateFilter, customFrom, customTo])
 
   const filteredByCurrency = useMemo(() => {
     const out: Record<string, number> = {}
