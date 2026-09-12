@@ -5,6 +5,7 @@ type Props = {
   value: string
   icon: LucideIcon
   accent?: 'green' | 'blue' | 'navy' | 'orange' | 'red'
+  onClick?: () => void
 }
 
 const accents = {
@@ -15,17 +16,17 @@ const accents = {
   red: ['border-l-red-500', 'bg-red-50 dark:bg-red-500/10'],
 }
 
-export default function StatCard({ title, value, icon: Icon, accent = 'navy' }: Props) {
+export default function StatCard({ title, value, icon: Icon, accent = 'navy', onClick }: Props) {
   const [border, bg] = accents[accent]
   return (
-    <div className={`stat-card flex min-h-[96px] items-center justify-between rounded-xl border border-slate-200 border-l-[3px] ${border} bg-white px-6 py-4 shadow-soft dark:border-[#24365f] dark:bg-[#111a2c]`}>
+    <button type="button" onClick={onClick} className={`stat-card flex min-h-[96px] w-full items-center justify-between rounded-xl border border-slate-200 border-l-[3px] ${border} bg-white px-6 py-4 text-start shadow-soft transition ${onClick ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-amber-400/50' : 'cursor-default'} dark:border-[#24365f] dark:bg-[#111a2c]`}>
       <div>
         <div className="text-[12px] text-slate-500 dark:text-sky-200">{title}</div>
-        <div className="mt-1 text-[22px] font-bold tracking-tight text-slate-950 dark:text-white">{value}</div>
+        <div className="mt-1 whitespace-pre-line text-[22px] font-bold leading-tight tracking-tight text-slate-950 dark:text-white">{value}</div>
       </div>
       <div className={`grid h-10 w-10 place-items-center rounded-xl ${bg}`}>
         <Icon size={18} strokeWidth={1.8} />
       </div>
-    </div>
+    </button>
   )
 }
