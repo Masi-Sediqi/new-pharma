@@ -347,7 +347,8 @@ function Dashboard({ filter, language, onFilterChange, onNavigate, onOpenRevenue
   const totalRevenue = invoices.reduce((sum, inv) => sum + num(inv.total), 0)
   const totalPaid = invoices.reduce((sum, inv) => sum + num(inv.paidAmount ?? inv.paid), 0)
   const pendingPayments = invoices.reduce((sum, inv) => sum + num(inv.balance ?? inv.remaining), 0)
-  const pureProfit = invoices.reduce((sum, inv) => sum + num(inv.profit), 0)
+  const profitInvoices = invoices.filter((inv) => invoiceFullyPaid(inv))
+  const pureProfit = profitInvoices.reduce((sum, inv) => sum + num(inv.profit), 0)
   const totalRefundsValue = invoices.reduce((sum, inv) => sum + num(inv.refundTotal), 0)
   const totalExpensesValue = expenses.reduce((sum, e) => sum + num(e.amountBase ?? e.amount ?? e.total), 0)
   const netProfit = pureProfit - totalExpensesValue
@@ -722,6 +723,7 @@ function invoiceFullyPaid(inv:any){
   const net=invoiceNetRevenue(inv)
   return net<=0.000001 || invoicePaidValue(inv)+0.000001>=net
 }
+function dateText(v:unknown){ const d=new Date(String(v||'')); return Number.isNaN(d.getTime())?'—':d.toLocaleDateString('en-US',{month:'short',day:'2-digit',year:'numeric'}) }
 function profitMoney(v:number){ return `${Math.abs(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}${v<0?'−':''} ؋` }
 
 function ProfitRangeSelect({value,onChange}:{value:ProfitRange;onChange:(v:ProfitRange)=>void}){
@@ -853,7 +855,7 @@ function CashWalletView({ language, onBack }: { language: Language; onBack: () =
   const paidByCurrency: Record<string, number> = {}
   invoices.forEach((inv:any)=>addCurrencyAmount(paidByCurrency,inv.currency||'AFN',num(inv.paidAmount??inv.paid)))
   const profitByCurrency: Record<string, number> = {}
-  invoices.forEach((inv:any)=>addCurrencyAmount(profitByCurrency,inv.currency||'AFN',num(inv.profit)))
+  invoices.filter((inv:any)=>invoiceFullyPaid(inv)).forEach((inv:any)=>addCurrencyAmount(profitByCurrency,inv.currency||'AFN',num(inv.profit)))
   const depositsByCurrency: Record<string, number> = {}
   depositRows.forEach((tx:any)=>addCurrencyAmount(depositsByCurrency,tx.currency||'AFN',num(tx.amount)))
   const withdrawalsByCurrency: Record<string, number> = {}
@@ -1080,7 +1082,7 @@ function DashboardDetailPage({ view, language, onBack, onNavigate }: { view:Dash
     const refundRows=invoices.flatMap((inv:any)=>(Array.isArray(inv.refundHistory)?inv.refundHistory:[]).map((r:any)=>({...r,invoice:inv}))).filter((x:any)=>detailRangeMatches(x,range)).filter((x:any)=>hit(x.invoice?.invoiceNo,x.invoice?.customerName,x.amount,x.reason,x.note))
     const total=refundRows.reduce((s:number,x:any)=>s+num(x.amount),0)
     const refundedInvoiceIds=new Set(refundRows.map((x:any)=>String(x.invoice?.id)))
-    const refundCogs=invoices.filter((inv:any)=>refundedInvoiceIds.has(String(inv.id))).reduce((s:number,inv:any)=>s+invoiceRefundCost(inv,products,{baseCurrency:'AFN',exchangeRates:{}}),0)
+    const refundCogs=invoices.filter((inv:any)=>refundedInvoiceIds.has(String(inv.id))).reduce((s:number,inv:any)=>s+invoiceRefundCostValue(inv,products),0)
     return <div dir={isRtl?'rtl':'ltr'}><DetailHeader title="Total Refundables" sub="Process Refund" onBack={onBack} printLabel="Print"/>
       <div className="grid gap-3 lg:grid-cols-3"><StatCard title="Total Refundables" value={fmt(total)} icon={RefreshCcw} accent="red"/><StatCard title="Records" value={String(refundRows.length)} icon={RefreshCcw} accent="navy"/><StatCard title="Cost of Goods Sold (Purchase Price × Qty Sold)" value={fmt(refundCogs)} icon={RefreshCcw} accent="orange"/></div>
       <div className="mt-5 flex gap-3 rounded-xl border border-slate-200 bg-white p-4"><div className="relative flex-1"><Search size={16} className="absolute start-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search..." className="h-10 w-full rounded-lg border border-slate-200 ps-9 pe-3 text-sm"/></div><DetailDropdown value={range} onChange={setRange} options={rangeOpts} className="w-[140px]"/></div>
