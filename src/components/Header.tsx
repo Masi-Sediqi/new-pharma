@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  Bell, Check, Download, Filter, Languages, Menu,
+  Bell, Check, CheckCheck, Download, Filter, Languages, Menu, Package, Trash2,
   LogOut, Moon, Search, Settings, SlidersHorizontal, Sun, Upload, User, Volume2,
   WalletCards, X
 } from 'lucide-react'
@@ -94,6 +94,106 @@ function saveArray(key: string, value: unknown[]) {
   window.dispatchEvent(new CustomEvent('storage'))
 }
 
+
+
+type ExpiryNotification = {
+  id: string
+  productId: string
+  productName: string
+  expiry: string
+  daysLeft: number
+  kind: 'expiring' | 'expired'
+}
+
+const NOTIFICATION_READ_KEY = 'pharma-notification-read'
+const NOTIFICATION_DISMISSED_KEY = 'pharma-notification-dismissed'
+
+function readStringSet(key: string): Set<string> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || '[]')
+    return new Set(Array.isArray(parsed) ? parsed.map(String) : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function saveStringSet(key: string, value: Set<string>) {
+  localStorage.setItem(key, JSON.stringify(Array.from(value)))
+}
+
+function parseExpiryDate(value: unknown): Date | null {
+  const raw = String(value ?? '').trim()
+  if (!raw) return null
+  let date: Date | null = null
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [y, m, d] = raw.split('-').map(Number)
+    date = new Date(y, m - 1, d)
+  } else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(raw)) {
+    const [m, d, y] = raw.split('/').map(Number)
+    date = new Date(y, m - 1, d)
+  } else {
+    const parsed = new Date(raw)
+    if (!Number.isNaN(parsed.getTime())) date = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate())
+  }
+  return date && !Number.isNaN(date.getTime()) ? date : null
+}
+
+function expiryNotifications(): ExpiryNotification[] {
+  const products = readArray('products')
+  const today = new Date()
+  const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const dismissed = readStringSet(NOTIFICATION_DISMISSED_KEY)
+
+  return products.flatMap((product: any, index: number) => {
+    const expiry = parseExpiryDate(product?.expiry ?? product?.expiryDate)
+    if (!expiry) return []
+    const diffMs = expiry.getTime() - startToday.getTime()
+    const daysLeft = Math.ceil(diffMs / 86400000)
+    const rawAlert = String(product?.alertBefore ?? 30)
+    const alertBefore = Math.max(1, Number(rawAlert.match(/\d+/)?.[0] ?? 30) || 30)
+    if (daysLeft > alertBefore) return []
+
+    const productId = String(product?.id ?? product?.code ?? index)
+    const productName = String(product?.name ?? product?.productName ?? product?.deviceName ?? 'Medicine')
+    const expiryKey = `${expiry.getFullYear()}-${String(expiry.getMonth() + 1).padStart(2, '0')}-${String(expiry.getDate()).padStart(2, '0')}`
+    const kind: ExpiryNotification['kind'] = daysLeft < 0 ? 'expired' : 'expiring'
+    const id = `expiry:${productId}:${expiryKey}:${kind}`
+    if (dismissed.has(id)) return []
+    return [{ id, productId, productName, expiry: expiryKey, daysLeft, kind }]
+  }).sort((a, b) => a.daysLeft - b.daysLeft)
+}
+
+function expiryNotificationText(language: Language, item: ExpiryNotification) {
+  if (language === 'دری') {
+    return {
+      title: item.kind === 'expired' ? 'تاریخ دوا گذشته است' : 'نزدیک به انقضا',
+      detail: item.daysLeft < 0
+        ? `${item.productName} — ${Math.abs(item.daysLeft)} روز از انقضا گذشته (${item.expiry})`
+        : `${item.productName} — ${item.daysLeft} روز (${item.expiry})`,
+      empty: 'هشداری موجود نیست',
+      heading: 'هشدارها',
+    }
+  }
+  if (language === 'پښتو') {
+    return {
+      title: item.kind === 'expired' ? 'د درملو نېټه تېره شوې' : 'د ختمېدو نېټه نږدې ده',
+      detail: item.daysLeft < 0
+        ? `${item.productName} — ${Math.abs(item.daysLeft)} ورځې تېرې شوې (${item.expiry})`
+        : `${item.productName} — ${item.daysLeft} ورځې (${item.expiry})`,
+      empty: 'هیڅ خبرتیا نشته',
+      heading: 'خبرتیاوې',
+    }
+  }
+  return {
+    title: item.kind === 'expired' ? 'Medicine expired' : 'Expiring soon',
+    detail: item.daysLeft < 0
+      ? `${item.productName} — expired ${Math.abs(item.daysLeft)} day(s) ago (${item.expiry})`
+      : `${item.productName} — ${item.daysLeft} day(s) (${item.expiry})`,
+    empty: 'No notifications',
+    heading: 'Notifications',
+  }
+}
+
 function IconButton({
   active,
   children,
@@ -145,6 +245,8 @@ export default function Header({ isRtl, language, onMenuClick, onLanguageChange,
   const wt = walletText[language] ?? walletText.English
   const headerRef = useRef<HTMLElement | null>(null)
   const [openMenu, setOpenMenu] = useState<MenuName>(null)
+  const [notifications, setNotifications] = useState<ExpiryNotification[]>(() => expiryNotifications())
+  const [readNotificationIds, setReadNotificationIds] = useState<Set<string>>(() => readStringSet(NOTIFICATION_READ_KEY))
   const [cashOpen, setCashOpen] = useState(false)
   const [walletMode, setWalletMode] = useState<'Deposit' | 'Withdraw'>('Deposit')
   const [walletAmount, setWalletAmount] = useState('')
@@ -153,8 +255,6 @@ export default function Header({ isRtl, language, onMenuClick, onLanguageChange,
   const [primaryCurrency, setPrimaryCurrency] = useState(() => localStorage.getItem(PRIMARY_CURRENCY_KEY) || 'all')
   const [exchangeFromCurrency, setExchangeFromCurrency] = useState(() => localStorage.getItem(EXCHANGE_FROM_KEY) || 'original')
   const [exchangeToCurrency, setExchangeToCurrency] = useState(() => localStorage.getItem(EXCHANGE_TO_KEY) || 'AFN')
-  const [installPrompt, setInstallPrompt] = useState<any>(null)
-  const [isStandalone, setIsStandalone] = useState(() => window.matchMedia?.('(display-mode: standalone)').matches || (window.navigator as any).standalone === true)
   const isDarkTheme = theme === 'glassmorphism' || theme === 'liquidGlass' || theme === 'neonGlass'
   const sidebarOffsetClass = sidebarCollapsed
     ? isRtl ? 'lg:mr-[72px]' : 'lg:ml-[72px]'
@@ -165,28 +265,38 @@ export default function Header({ isRtl, language, onMenuClick, onLanguageChange,
     document.documentElement.dataset.theme = theme
   }, [isDarkTheme, theme])
 
+
   useEffect(() => {
-    const onBeforeInstall = (event: Event) => {
-      event.preventDefault()
-      setInstallPrompt(event)
-    }
-    const onInstalled = () => {
-      setInstallPrompt(null)
-      setIsStandalone(true)
-    }
-    window.addEventListener('beforeinstallprompt', onBeforeInstall)
-    window.addEventListener('appinstalled', onInstalled)
+    const refreshNotifications = () => setNotifications(expiryNotifications())
+    refreshNotifications()
+    const interval = window.setInterval(refreshNotifications, 60_000)
+    window.addEventListener('pharma:data-changed', refreshNotifications)
+    window.addEventListener('storage', refreshNotifications)
     return () => {
-      window.removeEventListener('beforeinstallprompt', onBeforeInstall)
-      window.removeEventListener('appinstalled', onInstalled)
+      window.clearInterval(interval)
+      window.removeEventListener('pharma:data-changed', refreshNotifications)
+      window.removeEventListener('storage', refreshNotifications)
     }
   }, [])
 
-  const installApp = async () => {
-    if (!installPrompt) return
-    await installPrompt.prompt()
-    try { await installPrompt.userChoice } catch {}
-    setInstallPrompt(null)
+  const unreadNotificationCount = notifications.filter((item) => !readNotificationIds.has(item.id)).length
+  const markAllNotificationsRead = () => {
+    const next = new Set(readNotificationIds)
+    notifications.forEach((item) => next.add(item.id))
+    setReadNotificationIds(next)
+    saveStringSet(NOTIFICATION_READ_KEY, next)
+  }
+  const dismissNotification = (id: string) => {
+    const dismissed = readStringSet(NOTIFICATION_DISMISSED_KEY)
+    dismissed.add(id)
+    saveStringSet(NOTIFICATION_DISMISSED_KEY, dismissed)
+    setNotifications((current) => current.filter((item) => item.id !== id))
+  }
+  const clearNotifications = () => {
+    const dismissed = readStringSet(NOTIFICATION_DISMISSED_KEY)
+    notifications.forEach((item) => dismissed.add(item.id))
+    saveStringSet(NOTIFICATION_DISMISSED_KEY, dismissed)
+    setNotifications([])
   }
 
   useEffect(() => {
@@ -349,14 +459,6 @@ export default function Header({ isRtl, language, onMenuClick, onLanguageChange,
             <IconButton active={cashOpen} label="Cash wallet" onClick={openCashWallet}>
               <WalletCards size={17} />
             </IconButton>
-            {!isStandalone && installPrompt && (
-              <IconButton
-                label={language === 'دری' ? 'نصب اپلیکیشن' : language === 'پښتو' ? 'اپلېکېشن نصب کړئ' : 'Install app'}
-                onClick={installApp}
-              >
-                <Download size={17} />
-              </IconButton>
-            )}
             <IconButton active={isDarkTheme} label="Toggle dark mode" onClick={() => onThemeChange(isDarkTheme ? 'minimalism' : 'neonGlass')}>
               {isDarkTheme ? <Sun size={17} /> : <Moon size={17} />}
             </IconButton>
@@ -386,25 +488,50 @@ export default function Header({ isRtl, language, onMenuClick, onLanguageChange,
               <button
                 aria-label="Notifications"
                 onClick={() => toggleMenu('notifications')}
-                className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg transition sm:h-8 sm:w-8 ${
-                  openMenu === 'notifications'
-                    ? 'bg-amber-500 text-slate-950'
-                    : 'text-slate-950 hover:bg-slate-100 dark:text-white dark:hover:bg-white/10'
-                }`}
+                className="relative grid h-7 w-7 shrink-0 place-items-center rounded-lg text-slate-950 transition hover:bg-slate-100 sm:h-8 sm:w-8 dark:text-white dark:hover:bg-white/10"
               >
                 <Bell size={17} />
+                {unreadNotificationCount > 0 && (
+                  <span className="absolute right-0 top-0 z-10 grid min-h-[18px] min-w-[18px] translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white dark:ring-[#101827]">
+                    {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                  </span>
+                )}
               </button>
               {openMenu === 'notifications' && (
-                <MenuPanel isRtl={isRtl} className="w-[320px]">
-                  <div className="flex items-center justify-between px-3 py-4 text-base font-bold">
-                    <span>Notifications</span>
-                    <Volume2 size={17} />
-                  </div>
-                  <div className="grid h-[124px] place-items-center border-t border-slate-100 text-center text-slate-500 dark:border-[#24365f] dark:text-slate-300">
-                    <div>
-                      <Bell size={34} className="mx-auto mb-2 text-slate-400" />
-                      <div className="text-sm">No notifications</div>
+                <MenuPanel isRtl={isRtl} className="w-[390px] sm:w-[420px]">
+                  <div className="flex items-center justify-between px-3 py-3 text-base font-bold">
+                    <span>{notifications[0] ? expiryNotificationText(language, notifications[0]).heading : (language === 'دری' ? 'هشدارها' : language === 'پښتو' ? 'خبرتیاوې' : 'Notifications')}</span>
+                    <div className="flex items-center gap-1">
+                      <button type="button" onClick={markAllNotificationsRead} title="Mark all as read" className="grid h-8 w-8 place-items-center rounded-md hover:bg-slate-100 dark:hover:bg-white/10"><CheckCheck size={16}/></button>
+                      <button type="button" onClick={clearNotifications} title="Clear notifications" className="grid h-8 w-8 place-items-center rounded-md hover:bg-slate-100 dark:hover:bg-white/10"><Trash2 size={15}/></button>
                     </div>
+                  </div>
+                  <div className="max-h-[370px] overflow-y-auto border-t border-slate-100 dark:border-[#24365f]">
+                    {notifications.length === 0 ? (
+                      <div className="grid h-[124px] place-items-center text-center text-slate-500 dark:text-slate-300">
+                        <div>
+                          <Bell size={34} className="mx-auto mb-2 text-slate-400" />
+                          <div className="text-sm">{language === 'دری' ? 'هشداری موجود نیست' : language === 'پښتو' ? 'هیڅ خبرتیا نشته' : 'No notifications'}</div>
+                        </div>
+                      </div>
+                    ) : notifications.map((item) => {
+                      const copy = expiryNotificationText(language, item)
+                      const unread = !readNotificationIds.has(item.id)
+                      return (
+                        <div key={item.id} className={`flex items-start gap-3 border-b border-slate-100 px-3 py-3 last:border-b-0 dark:border-[#24365f] ${unread ? 'bg-amber-50/70 dark:bg-amber-500/5' : ''}`}>
+                          <div className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full ${item.kind === 'expired' ? 'bg-red-50 text-red-500 dark:bg-red-500/10 dark:text-red-300' : 'bg-amber-50 text-amber-500 dark:bg-amber-500/10 dark:text-amber-300'}`}>
+                            <Package size={16}/>
+                          </div>
+                          <button type="button" onClick={() => {
+                            const next = new Set(readNotificationIds); next.add(item.id); setReadNotificationIds(next); saveStringSet(NOTIFICATION_READ_KEY, next)
+                          }} className="min-w-0 flex-1 text-start">
+                            <div className={`text-sm font-bold ${item.kind === 'expired' ? 'text-red-600 dark:text-red-300' : 'text-slate-900 dark:text-white'}`}>{copy.title}</div>
+                            <div className="mt-0.5 text-xs leading-5 text-slate-500 dark:text-slate-300">{copy.detail}</div>
+                          </button>
+                          <button type="button" onClick={() => dismissNotification(item.id)} aria-label="Dismiss notification" className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-red-600 dark:hover:bg-white/10 dark:hover:text-red-300"><Trash2 size={14}/></button>
+                        </div>
+                      )
+                    })}
                   </div>
                 </MenuPanel>
               )}

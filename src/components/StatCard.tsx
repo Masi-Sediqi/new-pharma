@@ -18,12 +18,12 @@ const accents = {
 export default function StatCard({ title, value, icon: Icon, accent = 'navy' }: Props) {
   const [border, bg] = accents[accent]
   return (
-    <div className={`stat-card flex min-h-[88px] items-center justify-between rounded-xl border border-slate-200 border-l-[3px] ${border} bg-white px-5 py-4 shadow-soft dark:border-[#24365f] dark:bg-[#111a2c]`}>
+    <div className={`stat-card flex min-h-[96px] items-center justify-between rounded-xl border border-slate-200 border-l-[3px] ${border} bg-white px-6 py-4 shadow-soft dark:border-[#24365f] dark:bg-[#111a2c]`}>
       <div>
         <div className="text-[12px] text-slate-500 dark:text-sky-200">{title}</div>
         <div className="mt-1 text-[22px] font-bold tracking-tight text-slate-950 dark:text-white">{value}</div>
       </div>
-      <div className={`grid h-9 w-9 place-items-center rounded-xl ${bg}`}>
+      <div className={`grid h-10 w-10 place-items-center rounded-xl ${bg}`}>
         <Icon size={18} strokeWidth={1.8} />
       </div>
     </div>

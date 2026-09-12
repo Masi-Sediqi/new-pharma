@@ -142,14 +142,18 @@ function fmtMoney(value: number) {
   return value.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' ؋'
 }
 
-export default function TrendChart({ invoices, expenses, filter, language }: Props) {
-  const t = labels[language]
+export default function TrendChart({ invoices = [], expenses = [], filter = 'month', language = 'English' }: Partial<Props>) {
+  const safeInvoices = Array.isArray(invoices) ? invoices : []
+  const safeExpenses = Array.isArray(expenses) ? expenses : []
+  const safeFilter: DashboardFilter = filter || 'month'
+  const safeLanguage: Language = language || 'English'
+  const t = labels[safeLanguage]
   const { points, maxY } = useMemo(() => {
-    const buckets = buildBuckets(filter, language, invoices, expenses)
+    const buckets = buildBuckets(safeFilter, safeLanguage, safeInvoices, safeExpenses)
     const pts: Point[] = buckets.map(b => ({ key: b.key, label: b.label, revenue: 0, expenses: 0, refunds: 0, pending: 0, sales: 0 }))
     const findIndex = (date: Date | null) => date ? buckets.findIndex(b => date >= b.start && date < b.end) : -1
 
-    invoices.forEach(inv => {
+    safeInvoices.forEach(inv => {
       const invoiceDate = rowDate(inv)
       const invoiceIndex = findIndex(invoiceDate)
       const total = n(inv.total)
@@ -181,7 +185,7 @@ export default function TrendChart({ invoices, expenses, filter, language }: Pro
       }
     })
 
-    expenses.forEach(exp => {
+    safeExpenses.forEach(exp => {
       const idx = findIndex(rowDate(exp))
       if (idx >= 0) pts[idx].expenses += n(exp.amountBase ?? exp.amount ?? exp.total)
     })
@@ -192,7 +196,7 @@ export default function TrendChart({ invoices, expenses, filter, language }: Pro
     })
     const highest = Math.max(0, ...pts.flatMap(p => [p.revenue, p.expenses, p.refunds, p.pending, p.sales]))
     return { points: pts, maxY: niceMax(highest) }
-  }, [filter, language, invoices, expenses])
+  }, [safeFilter, safeLanguage, safeInvoices, safeExpenses])
 
   const W = 1200, H = 270, left = 72, right = 24, top = 18, bottom = 54
   const plotW = W - left - right, plotH = H - top - bottom

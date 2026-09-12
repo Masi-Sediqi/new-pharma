@@ -2,7 +2,7 @@ import { Component, lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import {
   Archive, Banknote, Box, CalendarDays, Check, CircleDollarSign, Clock3, Package, RefreshCcw,
-  Crown, ShieldCheck, ShoppingCart, TrendingUp, User, Users, WalletCards
+  Crown, ShieldCheck, ShoppingCart, TrendingUp, User, Users
 } from 'lucide-react'
 import Header from './components/Header'
 import QuickActions from './components/QuickActions'
@@ -16,12 +16,12 @@ import Settings from './Settings'
 import Suppliers from './pages/Suppliers'
 import SupplierDetails from './pages/SupplierDetails'
 import Billing from './pages/Billing'
-import Customers from './pages/Customers'
-import CustomerDetails from './pages/CustomerDetails'
 import type { Language } from './i18n'
 import type { ThemeName } from './theme'
 
 const Medicines = lazy(() => import('./pages/Medicines'))
+const Customers = lazy(() => import('./pages/Customers'))
+const CustomerDetails = lazy(() => import('./pages/CustomerDetails'))
 const Staff = lazy(() => import('./pages/Staff'))
 const StaffDetails = lazy(() => import('./pages/StaffDetails'))
 const Sales = lazy(() => import('./pages/Sales'))
@@ -294,7 +294,10 @@ function Dashboard({ filter, language, onFilterChange }: { filter: DashboardFilt
   const manualWalletDelta = transactions
     .filter((tx) => tx.source === 'cash-wallet' && (tx.referenceSource === 'manual-cash-wallet' || String(tx.id || '').startsWith('wallet-')))
     .reduce((sum, tx) => sum + (String(tx.type).toLowerCase() === 'expense' || String(tx.transactionType).toLowerCase() === 'withdraw' ? -num(tx.amount) : num(tx.amount)), 0)
-  const currentWallet = totalPaid - totalExpensesValue + manualWalletDelta
+  const medicinePurchaseWalletOut = transactions
+    .filter((tx) => tx.source === 'product-registration-wallet')
+    .reduce((sum, tx) => sum + num(tx.amount), 0)
+  const currentWallet = totalPaid - totalExpensesValue + manualWalletDelta - medicinePurchaseWalletOut
   const supplierAdjustments = godownEntries.flatMap((entry) => Array.isArray(entry.adjustments) ? entry.adjustments.map((a: any) => ({...a, supplierId: a.supplierId || entry.supplierId})) : [])
   const supplierBalances = suppliersData.map((supplier) => {
     const opening = num(supplier.openingBalance ?? supplier.balance)
@@ -351,11 +354,11 @@ function Dashboard({ filter, language, onFilterChange }: { filter: DashboardFilt
       <h2 className="mb-3 text-sm font-semibold">{t.financial}</h2>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <StatCard title={t.totalRevenue} value={formatDashboardMoney(totalRevenue)} icon={CircleDollarSign} accent="green" />
-        <StatCard title={t.currentWallet} value={formatDashboardMoney(currentWallet)} icon={WalletCards} accent="green" />
+        <StatCard title={t.currentWallet} value={formatDashboardMoney(currentWallet)} icon={Banknote} accent="green" />
         <StatCard title={t.netProfit} value={formatDashboardMoney(netProfit)} icon={TrendingUp} accent="green" />
         <StatCard title={t.pureProfit} value={formatDashboardMoney(pureProfit)} icon={TrendingUp} accent="green" />
         <StatCard title={t.totalSales} value={String(invoices.length)} icon={ShoppingCart} accent="blue" />
-        <StatCard title={t.totalExpenses} value={formatDashboardMoney(totalExpensesValue)} icon={WalletCards} accent="navy" />
+        <StatCard title={t.totalExpenses} value={formatDashboardMoney(totalExpensesValue)} icon={Banknote} accent="navy" />
         <StatCard title={t.pendingPayments} value={formatDashboardMoney(pendingPayments)} icon={Clock3} accent="orange" />
         <StatCard title={t.totalRefunds} value={formatDashboardMoney(totalRefundsValue)} icon={RefreshCcw} accent="red" />
         <StatCard title={t.totalCustomers} value={String(customers.length)} icon={Users} accent="navy" />
@@ -382,7 +385,7 @@ function Dashboard({ filter, language, onFilterChange }: { filter: DashboardFilt
         <StatCard title={t.staffPaid} value={formatDashboardMoney(staffPaid)} icon={CircleDollarSign} accent="green" />
       </div>
 
-      <div className="mt-7"><TrendChart invoices={allInvoices.filter((item) => currencyMatches(item.currency, businessCurrencyFilter))} expenses={allExpenses.filter((item) => currencyMatches(item.currency, businessCurrencyFilter))} filter={filter} language={language} /></div>
+      <div className="mt-7"><TrendChart invoices={invoices} expenses={expenses} filter={filter} language={language} /></div>
 
       <div className="mt-6 grid gap-5 xl:grid-cols-[470px_1fr]">
         <QuickActions />
@@ -508,7 +511,11 @@ export default function App() {
           ) : activePage === 'suppliers' ? (
             selectedSupplierId ? <SupplierDetails supplierId={selectedSupplierId} language={language} onBack={() => setSelectedSupplierId(null)} /> : <Suppliers language={language} onOpenSupplier={setSelectedSupplierId} globalSearch={globalSearch} />
           ) : activePage === 'customers' ? (
-            selectedCustomerId ? <CustomerDetails customerId={selectedCustomerId} language={language} onBack={() => setSelectedCustomerId(null)} /> : <Customers language={language} onOpenCustomer={setSelectedCustomerId} globalSearch={globalSearch} />
+            <PageErrorBoundary key={`customers-${selectedCustomerId || 'list'}-${language}`} pageName="Customers" onReset={() => { setSelectedCustomerId(null); setActivePage('dashboard') }}>
+              <Suspense fallback={<div className="grid min-h-[300px] place-items-center text-sm text-slate-500 dark:text-slate-300">Loading customers…</div>}>
+                {selectedCustomerId ? <CustomerDetails customerId={selectedCustomerId} language={language} onBack={() => setSelectedCustomerId(null)} /> : <Customers language={language} onOpenCustomer={setSelectedCustomerId} globalSearch={globalSearch} />}
+              </Suspense>
+            </PageErrorBoundary>
           ) : activePage === 'staff' ? (
             <Suspense fallback={<div className="grid min-h-[300px] place-items-center text-sm text-slate-500 dark:text-slate-300">Loading staff…</div>}>
               {selectedStaffId ? <StaffDetails staffId={selectedStaffId} language={language} onBack={() => setSelectedStaffId(null)} /> : <Staff language={language} onOpenStaff={setSelectedStaffId} globalSearch={globalSearch} />}
@@ -529,7 +536,7 @@ export default function App() {
             </Suspense>
           ) : activePage === 'loans' ? (
             <PageErrorBoundary key={`loans-${language}`} pageName="Loans" onReset={() => setActivePage('dashboard')}>
-              <Suspense fallback={<div className="grid min-h-[300px] place-items-center text-sm text-slate-500 dark:text-slate-300">Loading loans…</div>}><Loans language={language} /></Suspense>
+              <Suspense fallback={<div className="grid min-h-[300px] place-items-center text-sm text-slate-500 dark:text-slate-300">Loading loans…</div>}><Loans language={language} onEditInvoice={(id) => { setBillingEditId(id); setActivePage('billing') }} /></Suspense>
             </PageErrorBoundary>
           ) : activePage === 'financials' ? (
             <PageErrorBoundary key={`financials-${language}`} pageName="Financials" onReset={() => setActivePage('dashboard')}>
@@ -550,7 +557,9 @@ export default function App() {
               <Medicines language={language} globalSearch={globalSearch} />
             </Suspense>
           ) : (
-            <Dashboard filter={dashboardFilter} language={language} onFilterChange={setDashboardFilter} />
+            <PageErrorBoundary key={`dashboard-${language}`} pageName="Dashboard" onReset={() => setActivePage('dashboard')}>
+              <Dashboard filter={dashboardFilter} language={language} onFilterChange={setDashboardFilter} />
+            </PageErrorBoundary>
           )}
         </div>
       </main>

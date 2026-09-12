@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
-  CalendarDays, Check, ChevronDown, DollarSign, Pencil, Plus, Printer,
+  CalendarDays, Check, ChevronDown, DollarSign, Eye, Pencil, Plus, Printer,
   Search, Trash2, WalletCards, X
 } from 'lucide-react'
 import type { Language } from '../i18n'
@@ -76,7 +77,7 @@ const text = {
     filtered: 'Filtered Total', month: 'This Month', count: 'Expense Count', search: 'Search by description or category...',
     allCategories: 'All categories', allMethods: 'All methods', allTime: 'All time', today: 'Today', weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly', custom: 'Custom',
     records: 'Expenses', category: 'Category', description: 'Description', amount: 'Amount', currency: 'Currency', method: 'Payment Method', date: 'Date', actions: 'Actions', notes: 'Notes',
-    noData: 'No expense found', noDataSub: 'Add your first expense record', edit: 'Edit', del: 'Delete', modalAdd: 'Add Expense', modalEdit: 'Edit Expense',
+    noData: 'No expense found', noDataSub: 'Add your first expense record', view: 'View', edit: 'Edit', del: 'Delete', modalAdd: 'Add Expense', modalEdit: 'Edit Expense',
     customCategory: 'Custom', categoryName: 'Category name', addCategory: 'Add', cancel: 'Cancel', save: 'Save Expense', descPh: 'What was this expense for?', notesPh: 'Additional notes...',
     deleteTitle: 'Delete Expense', deleteMsg: 'Delete this expense? Its linked financial transaction will also be removed.', confirm: 'Delete', required: 'Description and a valid amount are required.'
   },
@@ -85,7 +86,7 @@ const text = {
     filtered: 'مجموع فیلتر شده', month: 'این ماه', count: 'تعداد مصارف', search: 'جستجو با توضیحات یا دسته‌بندی...',
     allCategories: 'همه دسته‌ها', allMethods: 'همه روش‌ها', allTime: 'همه وقت', today: 'امروز', weekly: 'هفتگی', monthly: 'ماهانه', yearly: 'سالانه', custom: 'سفارشی',
     records: 'مصارف', category: 'دسته‌بندی', description: 'توضیحات', amount: 'مقدار', currency: 'واحد پول', method: 'روش پرداخت', date: 'تاریخ', actions: 'عملیات', notes: 'یادداشت',
-    noData: 'مصرفی یافت نشد', noDataSub: 'اولین مصرف را اضافه کنید', edit: 'ویرایش', del: 'حذف', modalAdd: 'افزودن مصرف', modalEdit: 'ویرایش مصرف',
+    noData: 'مصرفی یافت نشد', noDataSub: 'اولین مصرف را اضافه کنید', view: 'مشاهده', edit: 'ویرایش', del: 'حذف', modalAdd: 'افزودن مصرف', modalEdit: 'ویرایش مصرف',
     customCategory: 'سفارشی +', categoryName: 'نام دسته‌بندی', addCategory: 'افزودن', cancel: 'لغو', save: 'ذخیره مصرف', descPh: 'این مصرف برای چه بود؟', notesPh: 'یادداشت‌های اضافی...',
     deleteTitle: 'حذف مصرف', deleteMsg: 'این مصرف حذف شود؟ تراکنش مالی مرتبط نیز حذف می‌شود.', confirm: 'حذف', required: 'توضیحات و مقدار معتبر الزامی است.'
   },
@@ -94,7 +95,7 @@ const text = {
     filtered: 'فلټر شوی ټول', month: 'دا میاشت', count: 'د لګښتونو شمېر', search: 'د تشریح یا کټګورۍ له مخې لټون...',
     allCategories: 'ټولې کټګورۍ', allMethods: 'ټولې طریقې', allTime: 'ټول وخت', today: 'نن', weekly: 'اوونیز', monthly: 'میاشتنی', yearly: 'کلنی', custom: 'ځانګړی',
     records: 'لګښتونه', category: 'کټګوري', description: 'تشریح', amount: 'مقدار', currency: 'اسعار', method: 'د ورکړې طریقه', date: 'نېټه', actions: 'عملیات', notes: 'یادښت',
-    noData: 'لګښت ونه موندل شو', noDataSub: 'لومړی لګښت اضافه کړئ', edit: 'سمول', del: 'ړنګول', modalAdd: 'لګښت زیات کړئ', modalEdit: 'لګښت سمول',
+    noData: 'لګښت ونه موندل شو', noDataSub: 'لومړی لګښت اضافه کړئ', view: 'کتل', edit: 'سمول', del: 'ړنګول', modalAdd: 'لګښت زیات کړئ', modalEdit: 'لګښت سمول',
     customCategory: 'ځانګړی +', categoryName: 'د کټګورۍ نوم', addCategory: 'زیاتول', cancel: 'لغوه', save: 'لګښت خوندي کړئ', descPh: 'دا لګښت د څه لپاره و؟', notesPh: 'اضافي یادښتونه...',
     deleteTitle: 'لګښت ړنګول', deleteMsg: 'دا لګښت ړنګ شي؟ اړوند مالي معامله به هم ړنګه شي.', confirm: 'ړنګول', required: 'تشریح او معتبر مقدار اړین دي.'
   }
@@ -184,21 +185,58 @@ function StatCard({ icon: Icon, label, value, tone }: { icon: any; label: string
   </article>
 }
 
-function ActionMenu({ t, onEdit, onDelete }: { t: any; onEdit: () => void; onDelete: () => void }) {
-  const [open, setOpen] = useState(false)
-  const root = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
-    const close = (event: MouseEvent) => { if (root.current && !root.current.contains(event.target as Node)) setOpen(false) }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [])
-  return <div ref={root} className="relative inline-block text-start">
-    <button type="button" onClick={() => setOpen((v) => !v)} className="grid h-8 w-9 place-items-center rounded-lg border border-transparent text-lg font-bold hover:border-slate-200 hover:bg-slate-100 dark:hover:border-[#31466f] dark:hover:bg-white/10">•••</button>
-    {open && <div className="absolute end-0 top-9 z-[70] w-36 rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl dark:border-[#2a3d68] dark:bg-[#101a2e]">
-      <button type="button" onClick={() => { setOpen(false); onEdit() }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-white/10"><Pencil size={15}/>{t.edit}</button>
-      <button type="button" onClick={() => { setOpen(false); onDelete() }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"><Trash2 size={15}/>{t.del}</button>
-    </div>}
-  </div>
+function ActionMenu({ t, language, onView, onEdit, onDelete }: { t: any; language: Language; onView: () => void; onEdit: () => void; onDelete: () => void }) {
+  const [menu, setMenu] = useState<{ top: number; left: number } | null>(null)
+
+  const openMenu = (button: HTMLButtonElement) => {
+    if (menu) { setMenu(null); return }
+    const rect = button.getBoundingClientRect()
+    const width = 170
+    const height = 140
+    const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8))
+    const top = rect.bottom + 8 + height <= window.innerHeight
+      ? rect.bottom + 8
+      : Math.max(8, rect.top - height - 8)
+    setMenu({ top, left })
+  }
+
+  return <>
+    <button
+      type="button"
+      onClick={(e) => openMenu(e.currentTarget)}
+      className="grid h-8 w-9 place-items-center rounded-lg border border-transparent text-lg font-bold transition hover:border-slate-200 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-400/30 dark:hover:border-[#31466f] dark:hover:bg-white/10"
+      aria-label={t.actions}
+    >
+      •••
+    </button>
+
+    {menu && createPortal(
+      <>
+        <button
+          type="button"
+          aria-label="Close actions"
+          className="fixed inset-0 z-[80] cursor-default bg-transparent"
+          onClick={() => setMenu(null)}
+        />
+        <div
+          dir={language === 'English' ? 'ltr' : 'rtl'}
+          className="fixed z-[90] w-[170px] overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 text-start shadow-2xl dark:border-[#2a3d68] dark:bg-[#101a2e]"
+          style={{ top: menu.top, left: menu.left }}
+        >
+          <button type="button" onClick={() => { setMenu(null); onView() }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-white/10">
+            <Eye size={15}/><span className="flex-1 whitespace-nowrap">{t.view}</span>
+          </button>
+          <button type="button" onClick={() => { setMenu(null); onEdit() }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-white/10">
+            <Pencil size={15}/><span className="flex-1 whitespace-nowrap">{t.edit}</span>
+          </button>
+          <button type="button" onClick={() => { setMenu(null); onDelete() }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-500 transition hover:bg-red-50 dark:hover:bg-red-500/10">
+            <Trash2 size={15}/><span className="flex-1 whitespace-nowrap">{t.del}</span>
+          </button>
+        </div>
+      </>,
+      document.body
+    )}
+  </>
 }
 
 export default function Expenses({ language, globalSearch = '' }: { language: Language; globalSearch?: string }) {
@@ -216,6 +254,7 @@ export default function Expenses({ language, globalSearch = '' }: { language: La
   const [dateFilter, setDateFilter] = useState('all')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
+  const [viewing, setViewing] = useState<Expense | null>(null)
   const [editing, setEditing] = useState<Expense | null | undefined>(undefined)
   const [deleting, setDeleting] = useState<Expense | null>(null)
   const settings = loadObject('settings')
@@ -342,9 +381,30 @@ export default function Expenses({ language, globalSearch = '' }: { language: La
     <section className="overflow-visible rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-[#25365f] dark:bg-[#111827]">
       <div className="mb-4 flex items-center justify-between"><h2 className="font-bold text-slate-950 dark:text-white">{t.records} ({filtered.length})</h2><WalletCards size={18} className="text-slate-600 dark:text-slate-300"/></div>
       {filtered.length ? <div className="overflow-x-auto pb-2"><table className="w-full min-w-[850px] text-sm"><thead><tr className="border-b border-slate-200 text-slate-500 dark:border-[#2a3d68] dark:text-slate-400"><th className="px-3 py-3 text-start">{t.category}</th><th className="px-3 py-3 text-start">{t.description}</th><th className="px-3 py-3 text-start">{t.amount}</th><th className="px-3 py-3 text-start">{t.method}</th><th className="px-3 py-3 text-start">{t.date}</th><th className="px-3 py-3 text-start">{t.actions}</th></tr></thead>
-        <tbody>{filtered.map((expense) => <tr key={expense.id} className="border-b border-slate-100 last:border-0 dark:border-[#1d2b49]"><td className="px-3 py-4"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 dark:bg-white/10 dark:text-slate-200">{categoryLabels[expense.category]?.[language] || expense.category}</span></td><td className="px-3 py-4"><strong className="block text-slate-950 dark:text-white">{expense.description}</strong>{expense.notes && <span className="mt-0.5 block max-w-[360px] truncate text-xs text-slate-500 dark:text-slate-400">{expense.notes}</span>}</td><td className="px-3 py-4 font-bold text-red-500">{money(expense.amount, expense.currency)}</td><td className="px-3 py-4 text-slate-700 dark:text-slate-200">{methodLabels[expense.method]?.[language] || expense.method}</td><td className="px-3 py-4 text-slate-700 dark:text-slate-200">{expense.date || '-'}</td><td className="px-3 py-4"><ActionMenu t={t} onEdit={() => setEditing(expense)} onDelete={() => setDeleting(expense)}/></td></tr>)}</tbody></table></div>
+        <tbody>{filtered.map((expense) => <tr key={expense.id} className="border-b border-slate-100 last:border-0 dark:border-[#1d2b49]"><td className="px-3 py-4"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 dark:bg-white/10 dark:text-slate-200">{categoryLabels[expense.category]?.[language] || expense.category}</span></td><td className="px-3 py-4"><strong className="block text-slate-950 dark:text-white">{expense.description}</strong>{expense.notes && <span className="mt-0.5 block max-w-[360px] truncate text-xs text-slate-500 dark:text-slate-400">{expense.notes}</span>}</td><td className="px-3 py-4 font-bold text-red-500">{money(expense.amount, expense.currency)}</td><td className="px-3 py-4 text-slate-700 dark:text-slate-200">{methodLabels[expense.method]?.[language] || expense.method}</td><td className="px-3 py-4 text-slate-700 dark:text-slate-200">{expense.date || '-'}</td><td className="px-3 py-4"><ActionMenu t={t} language={language} onView={() => setViewing(expense)} onEdit={() => setEditing(expense)} onDelete={() => setDeleting(expense)}/></td></tr>)}</tbody></table></div>
       : <div className="grid min-h-[250px] place-items-center text-center"><div><WalletCards size={44} className="mx-auto text-slate-300 dark:text-slate-600"/><div className="mt-3 font-bold text-slate-900 dark:text-white">{t.noData}</div><div className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t.noDataSub}</div></div></div>}
     </section>
+
+    {viewing && <div className="fixed inset-0 z-[100] grid place-items-center overflow-y-auto bg-black/70 p-4 backdrop-blur-[1px]" onMouseDown={(e) => { if (e.currentTarget === e.target) setViewing(null) }}>
+      <div dir={rtl ? 'rtl' : 'ltr'} className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl dark:border-[#334871] dark:bg-[#111827] dark:text-white">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-extrabold">{t.records}</h2>
+          <button type="button" onClick={() => setViewing(null)} className="grid h-8 w-8 place-items-center rounded-lg hover:bg-slate-100 dark:hover:bg-white/10"><X size={18}/></button>
+        </div>
+        <div className="mt-5 space-y-3 text-sm">
+          <div className="flex justify-between gap-4 border-b border-slate-100 pb-3 dark:border-[#2a3d68]"><span className="text-slate-500">{t.category}</span><b>{categoryLabels[viewing.category]?.[language] || viewing.category}</b></div>
+          <div className="flex justify-between gap-4 border-b border-slate-100 pb-3 dark:border-[#2a3d68]"><span className="text-slate-500">{t.description}</span><b className="text-end">{viewing.description}</b></div>
+          <div className="flex justify-between gap-4 border-b border-slate-100 pb-3 dark:border-[#2a3d68]"><span className="text-slate-500">{t.amount}</span><b className="text-red-500">{money(viewing.amount, viewing.currency)}</b></div>
+          <div className="flex justify-between gap-4 border-b border-slate-100 pb-3 dark:border-[#2a3d68]"><span className="text-slate-500">{t.method}</span><b>{methodLabels[viewing.method]?.[language] || viewing.method}</b></div>
+          <div className="flex justify-between gap-4 border-b border-slate-100 pb-3 dark:border-[#2a3d68]"><span className="text-slate-500">{t.date}</span><b>{viewing.date || '-'}</b></div>
+          {viewing.notes && <div className="rounded-xl bg-slate-50 p-3 dark:bg-white/5"><div className="mb-1 text-xs font-semibold text-slate-500">{t.notes}</div><div>{viewing.notes}</div></div>}
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-2">
+          <button type="button" onClick={() => { const row = viewing; setViewing(null); setEditing(row) }} className="app-btn-secondary justify-center"><Pencil size={15}/>{t.edit}</button>
+          <button type="button" onClick={() => setViewing(null)} className="app-btn-primary justify-center">{t.cancel}</button>
+        </div>
+      </div>
+    </div>}
 
     {editing !== undefined && <ExpenseModal language={language} t={t} categories={categories} baseCurrency={baseCurrency} initial={editing} onAddCategory={addCategory} onClose={() => setEditing(undefined)} onSave={persistExpense}/>} 
     {deleting && <ConfirmModal t={t} onClose={() => setDeleting(null)} onConfirm={() => removeExpense(deleting)}/>} 

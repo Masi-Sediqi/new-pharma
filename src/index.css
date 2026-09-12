@@ -311,11 +311,11 @@ textarea {
 }
 
 /* 2026-09 Staff/Billing integration fixes */
-.billing-layout{display:grid!important;grid-template-columns:minmax(300px,390px) minmax(0,1fr)!important;align-items:start!important}
+.billing-layout{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(300px,390px)!important;align-items:start!important}
 .billing-sidebar{min-width:0!important}.billing-content{min-width:0!important}
-[dir="ltr"] .billing-sidebar{grid-column:1}[dir="ltr"] .billing-content{grid-column:2}
-[dir="rtl"] .billing-layout{grid-template-columns:minmax(0,1fr) minmax(300px,390px)!important}
-[dir="rtl"] .billing-sidebar{grid-column:2}[dir="rtl"] .billing-content{grid-column:1}
+[dir="ltr"] .billing-sidebar{grid-column:2}[dir="ltr"] .billing-content{grid-column:1}
+[dir="rtl"] .billing-layout{grid-template-columns:minmax(300px,390px) minmax(0,1fr)!important}
+[dir="rtl"] .billing-sidebar{grid-column:1}[dir="rtl"] .billing-content{grid-column:2}
 @media(max-width:1023px){.billing-layout{grid-template-columns:1fr!important}[dir="rtl"] .billing-sidebar,[dir="rtl"] .billing-content{grid-column:auto}}
 .app-btn-primary,.app-btn-secondary{display:inline-flex;min-height:40px;align-items:center;justify-content:center;gap:.5rem;border-radius:.6rem;padding:0 .9rem;font-size:.875rem;font-weight:700;transition:.18s}
 .app-btn-primary{background:#172a57;color:#fff}.app-btn-secondary{border:1px solid #dbe3ee;background:#fff;color:#172033}
@@ -328,6 +328,29 @@ textarea {
 .modal-card{width:100%;max-height:calc(100vh - 40px);overflow:auto;border:1px solid #e2e8f0;border-radius:14px;background:#fff;padding:22px;color:#0f172a;box-shadow:0 30px 80px rgba(0,0,0,.35)}
 .dark .modal-card{border-color:#33466c;background:#0f192b;color:#f8fafc}.dark .modal-card svg{stroke:#eaf2ff!important}.dark .form-control{color:#f8fafc;background:#0b1425;border-color:#304163}.dark .form-control::placeholder{color:#7f91ae}.dark select.form-control option{background:#0f192b;color:#f8fafc}
 
+.billing-page-ltr .billing-layout.billing-layout-ltr {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 390px) !important;
+  align-items: start !important;
+  width: 100% !important;
+  gap: 1.25rem !important;
+}
+.billing-page-ltr .billing-sidebar,
+.billing-page-ltr .billing-content {
+  max-width: none !important;
+  min-width: 0 !important;
+}
+.billing-page-ltr .billing-sidebar {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  width: 100% !important;
+}
+.billing-page-ltr .billing-content {
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+  width: 100% !important;
+}
+
 /* Settings module controls */
 .field-label{display:block;font-size:.82rem;font-weight:600;color:#334155}.dark .field-label{color:#cbd5e1}
 .input-ui{height:42px;width:100%;border:1px solid #dbe3ee;border-radius:.65rem;background:#fff;padding:0 .8rem;color:#0f172a;outline:none}.input-ui:focus{border-color:#1e3a6d;box-shadow:0 0 0 2px rgba(30,58,109,.08)}.dark .input-ui{border-color:#314260;background:#0c1628;color:#fff}.dark .input-ui option{background:#0c1628;color:#fff}
@@ -338,7 +361,7 @@ textarea {
    Mirror the English split layout without stacking the form panels. */
 .billing-page-rtl .billing-layout.billing-layout-rtl {
   display: grid !important;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 390px) !important;
+  grid-template-columns: minmax(300px, 390px) minmax(0, 1fr) !important;
   align-items: start !important;
   width: 100% !important;
   gap: 1.25rem !important;
@@ -349,12 +372,12 @@ textarea {
   min-width: 0 !important;
 }
 .billing-page-rtl .billing-sidebar {
-  grid-column: 2 !important;
+  grid-column: 1 !important;
   grid-row: 1 !important;
   width: 100% !important;
 }
 .billing-page-rtl .billing-content {
-  grid-column: 1 !important;
+  grid-column: 2 !important;
   grid-row: 1 !important;
   width: 100% !important;
 }
@@ -384,7 +407,7 @@ textarea {
 }
 @media (min-width: 1024px) {
   .billing-page-rtl .billing-layout.billing-layout-rtl {
-    grid-template-columns: minmax(0, 1fr) minmax(300px, 390px) !important;
+    grid-template-columns: minmax(300px, 390px) minmax(0, 1fr) !important;
   }
 }
 @media (max-width: 1023px) {
